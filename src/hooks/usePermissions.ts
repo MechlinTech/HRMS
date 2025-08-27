@@ -1,0 +1,266 @@
+import { useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { ROLE_DASHBOARD_MAPPING, DASHBOARD_CONFIG, ROLES } from '@/constants';
+import { DASHBOARDS } from '@/constants';
+
+export function usePermissions() {
+  const { user } = useAuth();
+
+  const permissions = useMemo(() => {
+    if (!user) return { dashboards: [], pages: [] };
+
+    // 1. Get role-based dashboards
+    let roleName = '';
+    if (user.role?.name) {
+      roleName = user.role.name;
+    } else if (user.role_id) {
+      roleName = user.role_id;
+    } else {
+      roleName = ROLES.EMPLOYEE;
+    }
+    
+    // Super admin and admin have access to ALL dashboards
+    if (roleName === ROLES.SUPER_ADMIN || roleName === ROLES.ADMIN || 
+        roleName === 'super_admin' || roleName === 'admin') {
+      const allDashboards = Object.values(DASHBOARDS);
+      const allPages = allDashboards.flatMap(dashboardId => {
+        const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
+        return dashboard?.pages.map(page => ({
+          ...page,
+          dashboard: dashboardId,
+          fullPath: page.path
+        })) || [];
+      });
+      
+      return {
+        dashboards: allDashboards,
+        pages: allPages
+      };
+    }
+    
+    // Get role-based dashboards (primary source of truth)
+    const roleDashboards = ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || [];
+    
+    // For regular employees, only allow role-based dashboards (no extra permissions)
+    if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
+      const finalDashboards = roleDashboards.length > 0 ? roleDashboards : [DASHBOARDS.SELF];
+      
+      const allPages = finalDashboards.flatMap(dashboardId => {
+        const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
+        return dashboard?.pages.map(page => ({
+          ...page,
+          dashboard: dashboardId,
+          fullPath: page.path
+        })) || [];
+      });
+
+      return {
+        dashboards: finalDashboards,
+        pages: allPages
+      };
+    }
+    
+    // For non-employee roles, allow additional permissions
+    // 2. Department-based dashboards (only for non-employees)
+    const departmentDashboards = Object.keys(user.extra_permissions?.department_dashboards || {})
+      .filter(dashboard => user.extra_permissions.department_dashboards[dashboard] === true);
+    
+    // 3. Explicit user dashboard permissions (only for non-employees)
+    const explicitDashboards = Object.keys(user.extra_permissions?.dashboards || {})
+      .filter(dashboard => user.extra_permissions.dashboards[dashboard] === true);
+    
+    // Combine all three sources (role + department + explicit) for non-employees
+    const allDashboards = [...new Set([
+      ...roleDashboards,
+      ...departmentDashboards, 
+      ...explicitDashboards
+    ])];
+    
+    // If no dashboards found, default to self dashboard
+    const finalDashboards = allDashboards.length > 0 ? allDashboards : [DASHBOARDS.SELF];
+
+    const allPages = finalDashboards.flatMap(dashboardId => {
+      const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
+      return dashboard?.pages.map(page => ({
+        ...page,
+        dashboard: dashboardId,
+        fullPath: page.path
+      })) || [];
+    });
+
+    return {
+      dashboards: finalDashboards,
+      pages: allPages
+    };
+  }, [user]);
+
+  const hasAccess = (dashboardId: string, pageId?: string) => {
+    if (!user) return false;
+
+    // Get user role
+    let roleName = '';
+    if (user.role?.name) {
+      roleName = user.role.name;
+    } else if (user.role_id) {
+      roleName = user.role_id;
+    } else {
+      roleName = ROLES.EMPLOYEE;
+    }
+    
+    // Super admin and admin have access to everything
+    if (roleName === 'super_admin' || roleName === 'admin') {
+      return true;
+    }
+
+    // For employees, only check role-based access
+    if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
+      const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
+      
+      if (!hasRoleAccess) {
+        return false;
+      }
+      
+      if (pageId) {
+        return permissions.pages.some(
+          page => page.dashboard === dashboardId && page.id === pageId
+        );
+      }
+      
+      return true;
+    }
+    
+    // For ex-employees, allow access to both self and exit dashboards
+    if (roleName === ROLES.EX_EMPLOYEE || roleName === 'ex_employee') {
+      const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
+      
+      if (!hasRoleAccess) {
+        return false;
+      }
+      
+      if (pageId) {
+        return permissions.pages.some(
+          page => page.dashboard === dashboardId && page.id === pageId
+        );
+      }
+      
+      return true;
+    }
+    
+    // For non-employees, check access through any of the three hierarchies
+    const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
+    const hasDepartmentAccess = user.extra_permissions?.department_dashboards?.[dashboardId] === true;
+    const hasExplicitAccess = user.extra_permissions?.dashboards?.[dashboardId] === true;
+    
+    if (!permissions.dashboards.includes(dashboardId)) {
+      return false;
+    }
+
+    if (pageId) {
+      // Check page access through role, department, or explicit permissions (non-employees only)
+      const hasRolePageAccess = permissions.pages.some(
+        page => page.dashboard === dashboardId && page.id === pageId
+      );
+      
+      const hasDepartmentPageAccess = user.extra_permissions?.department_pages?.[dashboardId]?.[pageId] === true;
+      const hasExplicitPageAccess = user.extra_permissions?.pages?.[dashboardId]?.[pageId] === true;
+      
+      if (hasExplicitPageAccess || hasDepartmentPageAccess) {
+        return true;
+      }
+      
+      // Check for explicit feature restrictions
+      const featureRestrictions = user.extra_permissions?.features?.[dashboardId]?.[pageId];
+      if (featureRestrictions === false) {
+        return false;
+      }
+
+      return hasRolePageAccess;
+    }
+
+    return true;
+  };
+
+  const getAccessibleDashboards = () => {
+    const accessibleDashboards = DASHBOARD_CONFIG.filter(dashboard => 
+      permissions.dashboards.includes(dashboard.id)
+    );
+    
+    return accessibleDashboards;
+  };
+
+  const getAccessiblePages = (dashboardId: string) => {
+    const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
+    if (!dashboard) return [];
+
+    return dashboard.pages.filter(page => 
+      hasAccess(dashboardId, page.id)
+    );
+  };
+
+  const hasCRUDAccess = (dashboardId: string, operation: 'create' | 'read' | 'update' | 'delete') => {
+    if (!user) return false;
+
+    // Get user role
+    let roleName = '';
+    if (user.role?.name) {
+      roleName = user.role.name;
+    } else if (user.role_id) {
+      roleName = user.role_id;
+    } else {
+      roleName = ROLES.EMPLOYEE;
+    }
+    
+    // Super admin and admin have full CRUD access
+    if (roleName === 'super_admin' || roleName === 'admin') {
+      return true;
+    }
+
+    // For employees, restrict CRUD access to only their own data in self dashboard
+    if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
+      if (dashboardId === 'self') {
+        // Employees can read and update their own data, create some records (like leave applications)
+        return ['read', 'create', 'update'].includes(operation);
+      }
+      return false;
+    }
+
+    // Check explicit CRUD permissions
+    const explicitCRUD = user.extra_permissions?.crud?.[dashboardId]?.[operation];
+    if (explicitCRUD !== undefined) {
+      return explicitCRUD;
+    }
+
+    // Check department CRUD permissions
+    const departmentCRUD = user.extra_permissions?.department_crud?.[dashboardId]?.[operation];
+    if (departmentCRUD !== undefined) {
+      return departmentCRUD;
+    }
+
+    // Default CRUD permissions based on role and dashboard access
+    if (permissions.dashboards.includes(dashboardId)) {
+      // HR roles typically have full CRUD access to their dashboards
+      if (['hr', 'super_admin', 'admin'].includes(roleName)) {
+        return true;
+      }
+      
+      // Managers have CRUD access to performance and employee management
+      if (['sdm', 'bdm', 'qam'].includes(roleName) && 
+          ['performance', 'employee_management'].includes(dashboardId)) {
+        return true;
+      }
+      
+      // Non-employee roles have read access and limited create/update
+      if (operation === 'read') return true;
+    }
+
+    return false;
+  };
+
+  return {
+    hasAccess,
+    hasCRUDAccess,
+    getAccessibleDashboards,
+    getAccessiblePages,
+    permissions
+  };
+}

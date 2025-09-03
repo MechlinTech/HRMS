@@ -5,9 +5,17 @@ export interface TimeEntry {
   id: string;
   user_id: string;
   start_time: string;
-  end_time: string;
+  duration: number; // Duration in seconds stored in second database
   created_at: string;
   updated_at: string;
+}
+
+// Duration calculation result interface
+export interface DurationInfo {
+  seconds: number;
+  hours: number;
+  formatted: string;
+  isOngoing: boolean;
 }
 
 export interface UserTimeData {
@@ -132,51 +140,18 @@ export const secondTimeApi = {
       console.log('=== getLatestTimeEntry START ===');
       console.log('Fetching latest time entry for user:', userId);
       
-      // First, let's check if the table exists and has data
-      console.log('Step 1: Checking time_entries table accessibility...');
-      
-      // Try a simple select first
-      const { data: allEntries, error: allError } = await secondSupabase
-        .from('time_entries')
-        .select('*')
-        .limit(5);
-      
-      console.log('Step 1 Result - allError:', allError);
-      console.log('Step 1 Result - allEntries:', allEntries);
-      console.log('Step 1 Result - allEntries length:', allEntries?.length || 0);
-      
-      if (allError) {
-        console.error('❌ Error accessing time_entries table:', allError);
-        console.log('❌ This suggests the anon key cannot access time_entries table');
-        return null;
-      }
-      
-      if (allEntries && allEntries.length > 0) {
-        console.log('✅ Time_entries table accessible, total entries found:', allEntries.length);
-        console.log('✅ Sample entry structure:', allEntries[0]);
-        console.log('✅ Sample entry user_id:', allEntries[0].user_id);
-        console.log('✅ Sample entry start_time:', allEntries[0].start_time);
-        console.log('✅ Sample entry user_id type:', typeof allEntries[0].user_id);
-        console.log('✅ Our userId type:', typeof userId);
-        console.log('✅ userId === sample user_id:', userId === allEntries[0].user_id);
-      } else {
-        console.log('⚠️ Time_entries table accessible but no data found');
-      }
-      
-      // Now try our specific query
-      console.log('Step 2: Executing specific query for user:', userId);
-      console.log('Step 2: Query: SELECT * FROM time_entries WHERE user_id = ? ORDER BY start_time DESC LIMIT 1');
+      // Optimized query - fetch only necessary fields: id, user_id, start_time, duration
+      console.log('Executing optimized query for user:', userId);
       
       const { data: entries, error } = await secondSupabase
         .from('time_entries')
-        .select('*')
+        .select('id, user_id, start_time, duration, created_at, updated_at')
         .eq('user_id', userId)
         .order('start_time', { ascending: false })
         .limit(1);
 
-      console.log('Step 2 Result - error:', error);
-      console.log('Step 2 Result - entries:', entries);
-      console.log('Step 2 Result - entries length:', entries?.length || 0);
+      console.log('Query result - error:', error);
+      console.log('Query result - entries:', entries);
 
       if (error) {
         console.error('❌ Error fetching latest time entry:', error);
@@ -191,10 +166,6 @@ export const secondTimeApi = {
       }
 
       console.log('⚠️ No time entries found for user:', userId);
-      console.log('⚠️ This could mean:');
-      console.log('   - No entries exist for this user_id');
-      console.log('   - user_id format mismatch');
-      console.log('   - RLS policies blocking access');
       console.log('=== getLatestTimeEntry END ===');
       return null;
     } catch (error) {
@@ -204,36 +175,87 @@ export const secondTimeApi = {
     }
   },
 
-  // Calculate total hours from time entries
-  calculateTotalHours(entries: TimeEntry[]): number {
-    const now = new Date();
+  // Get duration in seconds directly from database duration column
+  getDurationSeconds(entry: TimeEntry): number {
+    // Duration is stored in seconds in the second database
+    return entry.duration || 0;
+  },
+
+  // Calculate duration in hours from database duration
+  getDurationHours(entry: TimeEntry): number {
+    const durationSeconds = this.getDurationSeconds(entry);
+    return durationSeconds / 3600; // Convert seconds to hours
+  },
+
+  // Legacy functions for backward compatibility (deprecated - use getDurationSeconds/Hours instead)
+  calculateDurationSeconds(startTime: string, endTime?: string): number {
+    const start = new Date(startTime);
+    const end = endTime ? new Date(endTime) : new Date();
     
+    const durationMs = end.getTime() - start.getTime();
+    return Math.max(0, Math.floor(durationMs / 1000));
+  },
+
+  calculateDurationHours(startTime: string, endTime?: string): number {
+    const durationSeconds = this.calculateDurationSeconds(startTime, endTime);
+    return durationSeconds / 3600;
+  },
+
+  // Format duration seconds into human readable format
+  formatDuration(durationSeconds: number): string {
+    const hours = Math.floor(durationSeconds / 3600);
+    const minutes = Math.floor((durationSeconds % 3600) / 60);
+    const seconds = durationSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  },
+
+  // Get comprehensive duration information for a time entry using database duration
+  getDurationInfo(entry: TimeEntry): DurationInfo {
+    const seconds = this.getDurationSeconds(entry);
+    const hours = this.getDurationHours(entry);
+    const formatted = this.formatDuration(seconds);
+    
+    // Check if this is an ongoing session by comparing start_time + duration with current time
+    const startTime = new Date(entry.start_time);
+    const endTime = new Date(startTime.getTime() + (seconds * 1000));
+    const now = new Date();
+    const isOngoing = Math.abs(now.getTime() - endTime.getTime()) < 60000; // Within 1 minute suggests ongoing
+
+    return {
+      seconds,
+      hours,
+      formatted,
+      isOngoing
+    };
+  },
+
+  // Legacy function for backward compatibility (deprecated - use getDurationInfo(entry) instead)
+  getDurationInfoLegacy(startTime: string, endTime?: string): DurationInfo {
+    const seconds = this.calculateDurationSeconds(startTime, endTime);
+    const hours = this.calculateDurationHours(startTime, endTime);
+    const formatted = this.formatDuration(seconds);
+    const isOngoing = !endTime;
+
+    return {
+      seconds,
+      hours,
+      formatted,
+      isOngoing
+    };
+  },
+
+  // Calculate total hours from time entries using database duration
+  calculateTotalHours(entries: TimeEntry[]): number {
     return entries.reduce((total, entry) => {
-      // Convert start_time to UTC
-      const start = new Date(entry.start_time);
-      const startUTC = new Date(start.getTime() + start.getTimezoneOffset() * 60000);
-      
-      // If end_time exists, convert to UTC; otherwise use current UTC time for ongoing sessions
-      let end: Date;
-      if (entry.end_time) {
-        const endLocal = new Date(entry.end_time);
-        end = new Date(endLocal.getTime() + endLocal.getTimezoneOffset() * 60000);
-      } else {
-        // Use current UTC time for incomplete sessions
-        end = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
-        console.log(`Entry ${entry.id} has no end_time, using current UTC time:`, end.toISOString());
-      }
-      
-      const durationMs = end.getTime() - startUTC.getTime();
-      const durationHours = durationMs / (1000 * 60 * 60);
-      
-      // Only count positive durations (avoid future start times)
-      if (durationHours > 0) {
-        return total + durationHours;
-      } else {
-        console.log(`Entry ${entry.id} has invalid duration: ${durationHours}h (start UTC: ${startUTC.toISOString()}, end UTC: ${end.toISOString()})`);
-        return total;
-      }
+      const durationHours = this.getDurationHours(entry);
+      return total + durationHours;
     }, 0);
   },
 
@@ -281,7 +303,7 @@ export const secondTimeApi = {
         };
       }
 
-      // Check if the latest entry is within 8 hours of current time
+      // Check if the latest entry is within 12 hours of current time
       const now = new Date();
       const startTime = new Date(latestEntry.start_time);
       const timeDiffMs = now.getTime() - startTime.getTime();
@@ -291,24 +313,17 @@ export const secondTimeApi = {
       console.log('Current time:', now.toISOString());
       console.log('Time difference (hours):', timeDiffHours);
 
-      // Only include the entry if it's within 8 hours
+      // Only include the entry if it's within 12 hours
       let todayEntries: TimeEntry[] = [];
       let totalHoursToday = 0;
       
       if (timeDiffHours <= 12 && timeDiffHours >= 0) {
         todayEntries = [latestEntry];
+        totalHoursToday = this.getDurationHours(latestEntry);
         
-        // Calculate duration: current time - start time
-        if (latestEntry.end_time) {
-          const endTime = new Date(latestEntry.end_time);
-          const durationMs = endTime.getTime() - startTime.getTime();
-          totalHoursToday = durationMs / (1000 * 60 * 60);
-        } else {
-          // No end time, use current time
-          totalHoursToday = timeDiffHours;
-        }
-        
-        console.log('Entry is within 12 hours, duration:', totalHoursToday, 'hours');
+        console.log('Entry is within 12 hours, duration from database:', latestEntry.duration, 'seconds');
+        console.log('Calculated duration hours:', totalHoursToday, 'hours');
+        console.log('Duration in readable format:', this.formatDuration(latestEntry.duration));
       } else {
         console.log('Entry is outside 12-hour window or in the future');
         return {

@@ -21,8 +21,24 @@ export function LoginForm() {
   const [showSignup, setShowSignup] = useState(false);
   const [hasAttemptedSync, setHasAttemptedSync] = useState(false);
   const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
+  const [showInactivityMessage, setShowInactivityMessage] = useState(false);
   const { instance } = useMsal();
   const activeAccount = instance.getActiveAccount();
+
+  // Check for inactivity logout reason in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('reason') === 'inactivity') {
+      setShowInactivityMessage(true);
+      // Clean up the URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('reason');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Hide message after 10 seconds
+      setTimeout(() => setShowInactivityMessage(false), 10000);
+    }
+  }, []);
 
   // Get available accounts when component mounts
   useEffect(() => {
@@ -204,6 +220,13 @@ export function LoginForm() {
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* {showInactivityMessage && (
+            <Alert variant="default" className="border-amber-200 bg-amber-50">
+              <AlertDescription className="text-amber-800">
+                You were logged out due to 10 minutes of inactivity. Please sign in again.
+              </AlertDescription>
+            </Alert>
+          )} */}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

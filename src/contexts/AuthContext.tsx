@@ -4,6 +4,8 @@ import type { User } from '@/types';
 import { supabase } from '@/services/supabase';
 import { authApi } from '@/services/api';
 import { msalInstance } from '@/hooks/MsalAuthProvider';
+import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
+import { InactivityWarningModal } from '@/components/ui/inactivity-warning-modal';
 
 interface AuthContextType {
   user: User | null;
@@ -11,7 +13,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (userData: any) => Promise<void>;
   loginWithProvider: (provider: 'microsoft' | 'google', userData: any) => Promise<void>;
-  logout: () => void;
+  logout: (isAutoLogout?: boolean) => void;
   updateUser: (updates: Partial<User>) => Promise<void>;
 }
 
@@ -28,6 +30,21 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Inactivity timeout configuration
+  const TIMEOUT_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+  const WARNING_DURATION = 60 * 1000; // 1 minute warning
+
+  // Inactivity timeout hook
+  const { isWarning, remainingTime, extendSession } = useInactivityTimeout({
+    timeout: TIMEOUT_DURATION,
+    warningTime: WARNING_DURATION,
+    onTimeout: () => logout(true),
+    onWarning: () => {
+      console.log('Session timeout warning displayed');
+    },
+    enabled: !!user && !loading
+  });
 
   useEffect(() => {
     // Check for existing session
@@ -227,25 +244,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    // Log out from Microsoft if using MSAL
+  const logout = (isAutoLogout = false) => {
+    // Log reason for logout
+    if (isAutoLogout) {
+      console.log('User logged out due to inactivity');
+    }
+    
+    // First clear local storage and state
+    localStorage.removeItem('hrms_token');
+    localStorage.removeItem('hrms_user');
+    setUser(null);
+    
+    // Then handle MSAL logout if needed
     try {
       const accounts = msalInstance.getAllAccounts();
       if (accounts.length > 0) {
+        // Set a flag in session storage to indicate auto-logout
+        if (isAutoLogout) {
+          sessionStorage.setItem('inactivityLogout', 'true');
+        }
         msalInstance.logoutRedirect({
-          postLogoutRedirectUri: window.location.origin + '/login?logout=true'
+          postLogoutRedirectUri: window.location.origin + '/login?logout=true' + (isAutoLogout ? '&reason=inactivity' : '')
         });
-        return; // Don't clear local storage yet, let MSAL handle the redirect
+        return; // MSAL will handle the redirect
       }
     } catch (error) {
       console.error('MSAL logout error:', error);
     }
     
-    // Fallback: clear local storage and redirect
-    localStorage.removeItem('hrms_token');
-    localStorage.removeItem('hrms_user');
-    setUser(null);
-    window.location.href = '/login?logout=true';
+    // If no MSAL account, redirect immediately
+    window.location.href = '/login?logout=true' + (isAutoLogout ? '&reason=inactivity' : '');
   };
 
   const updateUser = async (updates: Partial<User>) => {
@@ -295,6 +323,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
+      <InactivityWarningModal
+        isOpen={isWarning}
+        remainingTime={remainingTime}
+        onExtendSession={extendSession}
+        onLogout={() => logout(true)}
+      />
     </AuthContext.Provider>
   );
 }

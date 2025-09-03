@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useJobPositions, useReferrals, useCreateReferral } from '@/hooks/useReferrals';
+import { useJobPositions, useReferrals, useCreateReferral, useCreateReferralWithResume } from '@/hooks/useReferrals';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +39,7 @@ export function ReferSomeone() {
   const { data: jobPositions, isLoading: positionsLoading } = useJobPositions();
   const { data: referralHistory, isLoading: historyLoading } = useReferrals();
   const createReferral = useCreateReferral();
+  const createReferralWithResume = useCreateReferralWithResume();
   
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
@@ -49,12 +50,26 @@ export function ReferSomeone() {
   const [whyRecommend, setWhyRecommend] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // New fields
+  const [linkedinProfile, setLinkedinProfile] = useState('');
+  const [currentCompany, setCurrentCompany] = useState('');
+  const [currentJobTitle, setCurrentJobTitle] = useState('');
+  const [experienceYears, setExperienceYears] = useState('');
+  const [experienceMonths, setExperienceMonths] = useState('');
+  const [currentCtc, setCurrentCtc] = useState('');
+  const [expectedCtc, setExpectedCtc] = useState('');
+  const [noticePeriod, setNoticePeriod] = useState('');
+  const [reasonForChange, setReasonForChange] = useState('');
+  const [keySkills, setKeySkills] = useState('');
+  const [domainExpertise, setDomainExpertise] = useState('');
+  const [locationPreference, setLocationPreference] = useState('Mohali');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!candidateName.trim() || !candidateEmail.trim() || !position || !relationship || !user) return;
 
-    createReferral.mutate({
+    const referralData = {
       referred_by: user.id,
       candidate_name: candidateName.trim(),
       candidate_email: candidateEmail.trim(),
@@ -62,19 +77,56 @@ export function ReferSomeone() {
       position: position,
       additional_info: additionalInfo.trim() || null,
       relationship: relationship,
+      linkedin_profile: linkedinProfile.trim() || null,
+      current_company: currentCompany.trim() || null,
+      current_job_title: currentJobTitle.trim() || null,
+      total_experience_years: experienceYears ? parseInt(experienceYears) : null,
+      total_experience_months: experienceMonths ? parseInt(experienceMonths) : null,
+      current_ctc: currentCtc ? parseFloat(currentCtc) : null,
+      expected_ctc: expectedCtc ? parseFloat(expectedCtc) : null,
+      notice_period_availability: noticePeriod.trim() || null,
+      reason_for_change: reasonForChange.trim() || null,
+      key_skills: keySkills.trim() || null,
+      domain_expertise: domainExpertise.trim() || null,
+      location_preference: locationPreference as 'Mohali' | 'Kota',
       status: 'submitted',
       bonus_eligible: true
-    }, {
+    };
+
+    const mutation = resumeFile ? createReferralWithResume : createReferral;
+    const mutationData = resumeFile 
+      ? { referralData, resumeFile }
+      : referralData;
+
+    mutation.mutate(mutationData, {
       onSuccess: () => {
         // Reset form
-      setCandidateName('');
-      setCandidateEmail('');
-      setCandidatePhone('');
-      setPosition('');
-      setRelationship('');
-      setAdditionalInfo('');
-      setWhyRecommend('');
-      setResumeFile(null);
+        setCandidateName('');
+        setCandidateEmail('');
+        setCandidatePhone('');
+        setPosition('');
+        setRelationship('');
+        setAdditionalInfo('');
+        setWhyRecommend('');
+        setResumeFile(null);
+        // Reset new fields
+        setLinkedinProfile('');
+        setCurrentCompany('');
+        setCurrentJobTitle('');
+        setExperienceYears('');
+        setExperienceMonths('');
+        setCurrentCtc('');
+        setExpectedCtc('');
+        setNoticePeriod('');
+        setReasonForChange('');
+        setKeySkills('');
+        setDomainExpertise('');
+        setLocationPreference('Mohali');
+        // Clear file input
+        const fileInput = document.getElementById('resume') as HTMLInputElement;
+        if (fileInput) {
+          fileInput.value = '';
+        }
       }
     });
   };
@@ -204,6 +256,7 @@ export function ReferSomeone() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
+                    <h3 className="text-lg font-semibold mb-4">Candidate Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="candidateName">Candidate Name *</Label>
@@ -242,41 +295,223 @@ export function ReferSomeone() {
                       </div>
 
                       <div>
-                        <Label htmlFor="position">Position *</Label>
+                          <Label htmlFor="linkedinProfile">LinkedIn Profile</Label>
+                          <Input
+                            id="linkedinProfile"
+                            value={linkedinProfile}
+                            onChange={(e) => setLinkedinProfile(e.target.value)}
+                            placeholder="https://linkedin.com/in/username"
+                            className="mt-1"
+                          />
+                        </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="resume">Resume Upload</Label>
+                      <Input
+                        id="resume"
+                        type="file"
+                        onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
+                        className="mt-1"
+                        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Supported formats: PDF, DOC, DOCX, TXT, JPEG, PNG (Max 10MB)
+                      </p>
+                      {resumeFile && (
+                        <p className="text-xs text-green-600 mt-1">
+                          Selected: {resumeFile.name} ({Math.round(resumeFile.size / 1024)}KB)
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Professional Details Section */}
+                    <div className="border-t pt-2">
+                      <h3 className="text-lg font-semibold mb-4">Professional Details</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        <div>
+                          <Label htmlFor="currentCompany">Current Company</Label>
+                          <Input
+                            id="currentCompany"
+                            value={currentCompany}
+                            onChange={(e) => setCurrentCompany(e.target.value)}
+                            placeholder="Company name"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="currentJobTitle">Current Job Title</Label>
+                          <Input
+                            id="currentJobTitle"
+                            value={currentJobTitle}
+                            onChange={(e) => setCurrentJobTitle(e.target.value)}
+                            placeholder="Current position"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div>
+                          <Label htmlFor="experienceYears">Experience (Years)</Label>
+                          <Input
+                            id="experienceYears"
+                            type="number"
+                            value={experienceYears}
+                            onChange={(e) => setExperienceYears(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            max="50"
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="experienceMonths">Experience (Months)</Label>
+                          <Input
+                            id="experienceMonths"
+                            type="number"
+                            value={experienceMonths}
+                            onChange={(e) => setExperienceMonths(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            max="11"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <Label htmlFor="currentCtc">Current CTC (Optional)</Label>
+                          <Input
+                            id="currentCtc"
+                            type="number"
+                            value={currentCtc}
+                            onChange={(e) => setCurrentCtc(e.target.value)}
+                            placeholder="Annual salary in ₹"
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="expectedCtc">Expected CTC (Optional)</Label>
+                          <Input
+                            id="expectedCtc"
+                            type="number"
+                            value={expectedCtc}
+                            onChange={(e) => setExpectedCtc(e.target.value)}
+                            placeholder="Expected annual salary in ₹"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <Label htmlFor="noticePeriod">Notice Period / Availability</Label>
+                          <Input
+                            id="noticePeriod"
+                            value={noticePeriod}
+                            onChange={(e) => setNoticePeriod(e.target.value)}
+                            placeholder="e.g., 30 days, Immediate"
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="reasonForChange">Reason For Looking for Change</Label>
+                          <Textarea
+                            id="reasonForChange"
+                            value={reasonForChange}
+                            onChange={(e) => setReasonForChange(e.target.value)}
+                            placeholder="Why is the candidate looking for a new opportunity?"
+                            className="mt-1"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Skills & Expertise */}
+                      <h3 className="text-lg font-semibold mb-4 border-t pt-2">Skills & Expertise</h3>
+                    
+                    <div className="my-4">
+                        <Label htmlFor="keySkills">Key Technical/Functional Skills</Label>
+                        <Textarea
+                          id="keySkills"
+                          value={keySkills}
+                          onChange={(e) => setKeySkills(e.target.value)}
+                          placeholder="List the candidate's key skills, technologies, frameworks, etc."
+                          className="mt-1"
+                          rows={3}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="domainExpertise">Domain Expertise (if any)</Label>
+                        <Textarea
+                          id="domainExpertise"
+                          value={domainExpertise}
+                          onChange={(e) => setDomainExpertise(e.target.value)}
+                          placeholder="e.g., Healthcare, Fintech, E-commerce"
+                          className="mt-1"
+                          rows={2}
+                        />
+                      </div>
+                    
+                    {/* Referral Information */}
+                      <h3 className="text-lg font-semibold mb-4 border-t pt-2">Referral Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="position">Position Referred For *</Label>
                         <Select value={position} onValueChange={setPosition}>
                           <SelectTrigger className="mt-1">
                             <SelectValue placeholder="Select position" />
                           </SelectTrigger>
                           <SelectContent>
                             {jobPositions?.map((pos: any) => (
-                              <SelectItem key={pos.id} value={pos.title}>
-                                <div>
-                                  <div>{pos.title}</div>
-                                  <div className="text-xs text-muted-foreground">{pos.department?.name}</div>
-                                </div>
+                              <SelectItem key={pos.id} value={pos.job_title}>
+                                {pos.job_title}
+                                {pos.department?.name && (
+                                  <span className="text-xs text-muted-foreground ml-2">({pos.department.name})</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="locationPreference">Location Referring for *</Label>
+                        <Select value={locationPreference} onValueChange={setLocationPreference}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Mohali">Mohali</SelectItem>
+                            <SelectItem value="Kota">Kota</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="relationship">Relationship *</Label>
+                        <Select value={relationship} onValueChange={setRelationship}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="How do you know this person?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {relationshipTypes.map((rel) => (
+                              <SelectItem key={rel.value} value={rel.value}>
+                                {rel.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-
-                    <div>
-                      <Label htmlFor="relationship">Relationship *</Label>
-                      <Select value={relationship} onValueChange={setRelationship}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="How do you know this person?" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {relationshipTypes.map((rel) => (
-                            <SelectItem key={rel.value} value={rel.value}>
-                              {rel.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                    
                     <div>
                       <Label htmlFor="whyRecommend">Why do you recommend this candidate? *</Label>
                       <Textarea
@@ -301,20 +536,6 @@ export function ReferSomeone() {
                       />
                     </div>
 
-                    <div>
-                      <Label htmlFor="resume">Resume Upload</Label>
-                      <Input
-                        id="resume"
-                        type="file"
-                        onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
-                        className="mt-1"
-                        accept=".pdf,.doc,.docx"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Supported formats: PDF, DOC, DOCX (Max 5MB)
-                      </p>
-                    </div>
-
                     <Alert>
                       <Gift className="h-4 w-4" />
                       <AlertDescription>
@@ -326,9 +547,11 @@ export function ReferSomeone() {
                     <Button 
                       type="submit" 
                       className="w-full"
-                      disabled={!candidateName.trim() || !candidateEmail.trim() || !position || !relationship || !whyRecommend.trim() || createReferral.isPending}
+                      disabled={!candidateName.trim() || !candidateEmail.trim() || !position || !relationship || !whyRecommend.trim() || createReferral.isPending || createReferralWithResume.isPending}
                     >
-                      {createReferral.isPending ? 'Submitting Referral...' : 'Submit Referral'}
+                      {(createReferral.isPending || createReferralWithResume.isPending) ? (
+                        resumeFile ? 'Uploading Resume & Submitting...' : 'Submitting Referral...'
+                      ) : 'Submit Referral'}
                     </Button>
                   </form>
                 </CardContent>
@@ -389,7 +612,7 @@ export function ReferSomeone() {
                         <div key={pos.id} className="rounded-lg border p-3 hover:bg-muted/40 transition-colors">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold leading-none truncate">{pos.title}</p>
+                              <p className="text-sm font-semibold leading-none truncate">{pos.job_title}</p>
                               <div className="mt-1 flex items-center gap-2">
                                 {pos.department?.name && (
                                   <Badge variant="outline" className="text-[10px] px-2 py-0.5">

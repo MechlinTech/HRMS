@@ -3,24 +3,218 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Helper function to check leave application permissions
+export async function checkLeaveApplicationPermissions(userId: string, applicationUserId: string) {
+  // Get current user's data to check internal roles and admin status
+  const { data: currentUser, error: userError } = await supabase
+    .from('users')
+    .select('id, internal_people, internal_payroll, role:roles(name)')
+    .eq('id', userId)
+    .single();
+  
+  if (userError) throw userError;
+  
+  // Check if current user is admin/super_admin
+  const userRole = currentUser.role?.name || '';
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+  
+  // Check if current user has internal roles (internal_people and internal_payroll are UUID fields)
+  // Users whose ID matches the internal_people or internal_payroll UUID have special privileges
+  const isInternalPeople = currentUser.internal_people === userId;
+  const isInternalPayroll = currentUser.internal_payroll === userId;
+  
+  // Get the application user's manager info
+  const { data: applicationUser, error: appUserError } = await supabase
+    .from('users')
+    .select('manager_id')
+    .eq('id', applicationUserId)
+    .single();
+  
+  if (appUserError) throw appUserError;
+  
+  // Check if current user is the manager of the application user
+  const isManager = applicationUser.manager_id === userId;
+  
+  console.log('Permission check:', { 
+    userId, 
+    applicationUserId,
+    userRole,
+    isAdmin,
+    currentUser_internal_people: currentUser.internal_people,
+    currentUser_internal_payroll: currentUser.internal_payroll,
+    isInternalPeople, 
+    isInternalPayroll, 
+    isManager,
+    managerIdFromApp: applicationUser.manager_id 
+  });
+  
+  // NEW RULES:
+  // 1. ADMIN/SUPER_ADMIN have ALL permissions (highest priority)
+  if (isAdmin) {
+    return { canView: true, canEdit: true, reason: 'admin' };
+  }
+  
+  // 2. internal_people and managers can EDIT
+  if (isInternalPeople || isManager) {
+    return { canView: true, canEdit: true, reason: isInternalPeople ? 'internal_people' : 'manager' };
+  }
+  
+  // 3. internal_payroll can VIEW only (cannot edit)
+  if (isInternalPayroll) {
+    return { canView: true, canEdit: false, reason: 'internal_payroll' };
+  }
+  
+  // No access for other users
+  return { canView: false, canEdit: false, reason: 'no_access' };
+}
+
 // Hook for HR/Managers to manage leave applications
 export function useAllLeaveApplications() {
+  const { user } = useAuth();
+  
+  console.log('useAllLeaveApplications called with user:', user?.id);
+  
   return useQuery({
-    queryKey: ['all-leave-applications'],
+    queryKey: ['all-leave-applications', user?.id],
     queryFn: async () => {
+      console.log('useAllLeaveApplications queryFn executing...');
+      if (!user) throw new Error('User not authenticated');
+      
+      // Get current user's data to check internal roles and admin status
+      const { data: currentUser, error: userError } = await supabase
+        .from('users')
+        .select('id, internal_people, internal_payroll, role:roles(name)')
+        .eq('id', user.id)
+        .single();
+      
+      if (userError) throw userError;
+      
+      // Check if current user is admin/super_admin
+      const userRole = currentUser.role?.name || '';
+      const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+      
+      // Check if current user has internal roles (internal_people and internal_payroll are UUID fields)
+      const isInternalPeople = currentUser.internal_people === user.id;
+      const isInternalPayroll = currentUser.internal_payroll === user.id;
+      
+      console.log('View permissions:', { 
+        userId: user.id, 
+        userRole,
+        isAdmin,
+        currentUser_internal_people: currentUser.internal_people,
+        currentUser_internal_payroll: currentUser.internal_payroll,
+        isInternalPeople, 
+        isInternalPayroll
+      });
+      
+      // NEW RULES: admin, internal_people and internal_payroll can view ALL applications
+      if (isAdmin || isInternalPeople || isInternalPayroll) {
+        const { data, error } = await supabase
+          .rpc('get_leave_applications_with_manager_details');
+        
+        if (error) throw error;
+        
+        // Transform the data to match the expected structure
+        return data?.map((row: any) => ({
+          id: row.id,
+          user_id: row.user_id,
+          leave_type_id: row.leave_type_id,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          days_count: row.days_count,
+          reason: row.reason,
+          status: row.status,
+          applied_at: row.applied_at,
+          approved_by: row.approved_by,
+          approved_at: row.approved_at,
+          comments: row.comments,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          user: {
+            id: row.user_id,
+            full_name: row.user_full_name,
+            employee_id: row.user_employee_id,
+            email: row.user_email,
+            manager_id: row.user_manager_id,
+            manager: row.manager_id ? {
+              id: row.manager_id,
+              full_name: row.manager_full_name,
+              email: row.manager_email
+            } : null
+          },
+          leave_type: {
+            name: row.leave_type_name,
+            description: row.leave_type_description
+          },
+          approved_by_user: row.approved_by_full_name ? {
+            id: row.approved_by,
+            full_name: row.approved_by_full_name,
+            email: row.approved_by_email
+          } : null
+        })) || [];
+      }
+      
+      // If user is a manager, they can only view applications of their direct reports
+      // First get all user IDs that report to this manager
+      const { data: directReports, error: reportsError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('manager_id', user.id);
+      
+      if (reportsError) throw reportsError;
+      
+      const directReportIds = directReports?.map(report => report.id) || [];
+      
+      // If no direct reports, return empty array
+      if (directReportIds.length === 0) {
+        return [];
+      }
+      
       const { data, error } = await supabase
-        .from('leave_applications')
-        .select(`
-          *,
-          user:users!user_id(full_name, employee_id, email),
-          leave_type:leave_types!leave_type_id(name, description),
-          approved_by_user:users!approved_by(full_name)
-        `)
-        .order('created_at', { ascending: false });
+        .rpc('get_leave_applications_for_manager', { manager_user_id: user.id });
       
       if (error) throw error;
-      return data;
+      
+      // Transform the data to match the expected structure
+      return data?.map((row: any) => ({
+        id: row.id,
+        user_id: row.user_id,
+        leave_type_id: row.leave_type_id,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        days_count: row.days_count,
+        reason: row.reason,
+        status: row.status,
+        applied_at: row.applied_at,
+        approved_by: row.approved_by,
+        approved_at: row.approved_at,
+        comments: row.comments,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        user: {
+          id: row.user_id,
+          full_name: row.user_full_name,
+          employee_id: row.user_employee_id,
+          email: row.user_email,
+          manager_id: row.user_manager_id,
+          manager: row.manager_id ? {
+            id: row.manager_id,
+            full_name: row.manager_full_name,
+            email: row.manager_email
+          } : null
+        },
+        leave_type: {
+          name: row.leave_type_name,
+          description: row.leave_type_description
+        },
+        approved_by_user: row.approved_by_full_name ? {
+          id: row.approved_by,
+          full_name: row.approved_by_full_name,
+          email: row.approved_by_email
+        } : null
+      })) || [];
     },
+    enabled: !!user,
   });
 }
 
@@ -38,7 +232,26 @@ export function useUpdateLeaveApplicationStatus() {
       status: 'approved' | 'rejected' | 'cancelled'; 
       comments?: string; 
     }) => {
-      const { data, error } = await supabase
+      if (!user) throw new Error('User not authenticated');
+      
+      // First, get the leave application to check the user_id
+      const { data: application, error: appError } = await supabase
+        .from('leave_applications')
+        .select('user_id')
+        .eq('id', applicationId)
+        .single();
+      
+      if (appError) throw appError;
+      
+      // Check permissions
+      const permissions = await checkLeaveApplicationPermissions(user.id, application.user_id);
+      
+      if (!permissions.canEdit) {
+        throw new Error(`Access denied. You cannot edit this leave application. Reason: ${permissions.reason}`);
+      }
+      
+      // Update the leave application
+      const { error: updateError } = await supabase
         .from('leave_applications')
         .update({
           status,
@@ -47,17 +260,60 @@ export function useUpdateLeaveApplicationStatus() {
           comments: comments || null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', applicationId)
-        .select(`
-          *,
-          user:users!user_id(full_name, employee_id, email),
-          leave_type:leave_types!leave_type_id(name, description),
-          approved_by_user:users!approved_by(full_name)
-        `)
-        .single();
+        .eq('id', applicationId);
+      
+      if (updateError) throw updateError;
+      
+      // Fetch the updated data using our custom function
+      const { data, error } = await supabase
+        .rpc('get_leave_applications_with_manager_details');
       
       if (error) throw error;
-      return data;
+      
+      // Find the specific application that was updated
+      const updatedApplication = data?.find((row: any) => row.id === applicationId);
+      if (!updatedApplication) throw new Error('Updated application not found');
+      
+      // Transform to expected structure
+      const transformedData = {
+        id: updatedApplication.id,
+        user_id: updatedApplication.user_id,
+        leave_type_id: updatedApplication.leave_type_id,
+        start_date: updatedApplication.start_date,
+        end_date: updatedApplication.end_date,
+        days_count: updatedApplication.days_count,
+        reason: updatedApplication.reason,
+        status: updatedApplication.status,
+        applied_at: updatedApplication.applied_at,
+        approved_by: updatedApplication.approved_by,
+        approved_at: updatedApplication.approved_at,
+        comments: updatedApplication.comments,
+        created_at: updatedApplication.created_at,
+        updated_at: updatedApplication.updated_at,
+        user: {
+          id: updatedApplication.user_id,
+          full_name: updatedApplication.user_full_name,
+          employee_id: updatedApplication.user_employee_id,
+          email: updatedApplication.user_email,
+          manager_id: updatedApplication.user_manager_id,
+          manager: updatedApplication.manager_id ? {
+            id: updatedApplication.manager_id,
+            full_name: updatedApplication.manager_full_name,
+            email: updatedApplication.manager_email
+          } : null
+        },
+        leave_type: {
+          name: updatedApplication.leave_type_name,
+          description: updatedApplication.leave_type_description
+        },
+        approved_by_user: updatedApplication.approved_by_full_name ? {
+          id: updatedApplication.approved_by,
+          full_name: updatedApplication.approved_by_full_name,
+          email: updatedApplication.approved_by_email
+        } : null
+      };
+      
+      return transformedData;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
@@ -72,5 +328,26 @@ export function useUpdateLeaveApplicationStatus() {
       toast.error('Failed to update leave application');
       console.error('Leave application update error:', error);
     },
+  });
+}
+
+// Hook to check leave application permissions for UI components
+export function useLeaveApplicationPermissions(applicationUserId?: string) {
+  const { user } = useAuth();
+  
+  console.log('useLeaveApplicationPermissions called:', { userId: user?.id, applicationUserId });
+  
+  return useQuery({
+    queryKey: ['leave-permissions', user?.id, applicationUserId],
+    queryFn: async () => {
+      console.log('useLeaveApplicationPermissions queryFn executing:', { userId: user?.id, applicationUserId });
+      if (!user || !applicationUserId) {
+        console.log('Missing user or applicationUserId');
+        return { canView: false, canEdit: false, reason: 'no_user_or_application' };
+      }
+      
+      return await checkLeaveApplicationPermissions(user.id, applicationUserId);
+    },
+    enabled: !!user && !!applicationUserId,
   });
 }

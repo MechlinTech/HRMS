@@ -28,7 +28,9 @@ import {
   Phone,
   Mail,
   Calendar,
-  User
+  User,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -53,16 +55,29 @@ export function ReferralDashboard() {
 
   // Create Job Position form state
   const [isCreatePositionOpen, setIsCreatePositionOpen] = useState(false);
-  const [positionTitle, setPositionTitle] = useState('');
+  // Job Basics
+  const [jobTitle, setJobTitle] = useState('');
   const [positionDepartmentId, setPositionDepartmentId] = useState('');
+  const [location, setLocation] = useState('');
+  const [isRemote, setIsRemote] = useState(false);
+  const [workType, setWorkType] = useState('full_time');
+  // Role Overview - Bullet Points for Key Responsibilities
+  const [keyResponsibilitiesBullets, setKeyResponsibilitiesBullets] = useState<string[]>(['']);
+  // Candidate Requirements
+  const [experienceLevelDescription, setExperienceLevelDescription] = useState('');
+  const [technicalSkillsRequired, setTechnicalSkillsRequired] = useState('');
+  const [softSkills, setSoftSkills] = useState('');
+  // Application Process
+  const [howToApply, setHowToApply] = useState('');
+  const [applicationDeadline, setApplicationDeadline] = useState('');
+  const [referralEncouraged, setReferralEncouraged] = useState(true);
+  // Legacy fields (keeping for backward compatibility)
   const [positionDescription, setPositionDescription] = useState('');
   const [positionRequirements, setPositionRequirements] = useState('');
   const [experienceLevel, setExperienceLevel] = useState('mid');
   const [employmentType, setEmploymentType] = useState('full_time');
   const [salaryMin, setSalaryMin] = useState('');
   const [salaryMax, setSalaryMax] = useState('');
-  const [location, setLocation] = useState('');
-  const [isRemote, setIsRemote] = useState(false);
   const [jobStatus, setJobStatus] = useState('open');
 
   // Positions tab filters and editing
@@ -82,35 +97,98 @@ export function ReferralDashboard() {
   const [editLocation, setEditLocation] = useState('');
   const [editIsRemote, setEditIsRemote] = useState(false);
   const [editStatus, setEditStatus] = useState<'open' | 'closed' | 'on_hold'>('open');
+  // Additional edit form fields to match the comprehensive view
+  const [editKeyResponsibilities, setEditKeyResponsibilities] = useState('');
+  const [editExperienceLevelDescription, setEditExperienceLevelDescription] = useState('');
+  const [editTechnicalSkills, setEditTechnicalSkills] = useState('');
+  const [editSoftSkills, setEditSoftSkills] = useState('');
+  const [editHowToApply, setEditHowToApply] = useState('');
+  const [editApplicationDeadline, setEditApplicationDeadline] = useState('');
+  const [editReferralEncouraged, setEditReferralEncouraged] = useState(true);
+  const [editWorkType, setEditWorkType] = useState('full_time');
+
+  // Bullet point helper functions
+  const addBulletPoint = () => {
+    setKeyResponsibilitiesBullets([...keyResponsibilitiesBullets, '']);
+  };
+
+  const removeBulletPoint = (index: number) => {
+    if (keyResponsibilitiesBullets.length > 1) {
+      const newBullets = keyResponsibilitiesBullets.filter((_, i) => i !== index);
+      setKeyResponsibilitiesBullets(newBullets);
+    }
+  };
+
+  const updateBulletPoint = (index: number, value: string) => {
+    const newBullets = [...keyResponsibilitiesBullets];
+    newBullets[index] = value;
+    setKeyResponsibilitiesBullets(newBullets);
+  };
+
+  const bulletsToString = (bullets: string[]) => {
+    return bullets
+      .filter(bullet => bullet.trim())
+      .map(bullet => `• ${bullet.trim()}`)
+      .join('\n');
+  };
+
+  const stringToBullets = (str: string) => {
+    if (!str) return [''];
+    return str
+      .split('\n')
+      .map(line => line.replace(/^[•\-\*]\s*/, '').trim())
+      .filter(line => line)
+      .concat(['']); // Add empty bullet for new input
+  };
 
   const handleCreatePosition = () => {
-    if (!user?.id || !positionTitle.trim() || !positionDepartmentId) return;
+    if (!user?.id || !jobTitle.trim() || !positionDepartmentId) return;
+    
+    // Convert bullet points to formatted string
+    const responsibilitiesString = bulletsToString(keyResponsibilitiesBullets);
+    
     createJobPosition.mutate({
-      title: positionTitle.trim(),
+      job_title: jobTitle.trim(),
       department_id: positionDepartmentId,
-      description: positionDescription.trim() || null,
-      requirements: positionRequirements.trim() || null,
-      experience_level: experienceLevel,
-      employment_type: employmentType,
-      salary_range_min: salaryMin ? Number(salaryMin) : null,
-      salary_range_max: salaryMax ? Number(salaryMax) : null,
       location: location.trim() || null,
       is_remote: isRemote,
-      status: jobStatus,
+      work_type: workType,
+      key_responsibilities: responsibilitiesString || null,
+      experience_level_description: experienceLevelDescription.trim() || null,
+      technical_skills_required: technicalSkillsRequired.trim() || null,
+      soft_skills: softSkills.trim() || null,
+      how_to_apply: howToApply.trim() || null,
+      application_deadline: applicationDeadline || null,
+      referral_encouraged: referralEncouraged,
+      experience_level: 'mid', // Default value
+      employment_type: workType,
+      salary_range_min: null,
+      salary_range_max: null,
+      status: 'open',
       posted_by: user.id,
     }, {
       onSuccess: () => {
         setIsCreatePositionOpen(false);
-        setPositionTitle('');
+        // Reset new fields
+        setJobTitle('');
         setPositionDepartmentId('');
+        setLocation('');
+        setIsRemote(false);
+        setWorkType('full_time');
+        setKeyResponsibilitiesBullets(['']);
+        setExperienceLevelDescription('');
+        setTechnicalSkillsRequired('');
+        setSoftSkills('');
+        setHowToApply('');
+        setApplicationDeadline('');
+        setReferralEncouraged(true);
+        // Reset legacy fields
         setPositionDescription('');
         setPositionRequirements('');
         setExperienceLevel('mid');
         setEmploymentType('full_time');
         setSalaryMin('');
         setSalaryMax('');
-        setLocation('');
-        setIsRemote(false);
         setJobStatus('open');
       }
     });
@@ -300,10 +378,11 @@ export function ReferralDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Candidate</TableHead>
+                  <TableHead>Candidate</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Referred By</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Resume</TableHead>
                     <TableHead>Bonus</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead>Actions</TableHead>
@@ -350,6 +429,23 @@ export function ReferralDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {referral.resume_url ? (
+                          <a 
+                            href={referral.resume_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
+                          >
+                            View
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="text-sm">
                           <div className="font-medium">
                             ${(referral.bonus_amount || 0).toLocaleString()}
@@ -383,45 +479,287 @@ export function ReferralDashboard() {
                                 </DialogDescription>
                               </DialogHeader>
                               {selectedReferral && (
-                                <div className="space-y-4">
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                      <p className="font-medium">Candidate:</p>
-                                      <p className="text-muted-foreground">{selectedReferral.candidate_name}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">Email:</p>
-                                      <p className="text-muted-foreground">{selectedReferral.candidate_email}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">Phone:</p>
-                                      <p className="text-muted-foreground">{selectedReferral.candidate_phone || 'Not provided'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">Position:</p>
-                                      <p className="text-muted-foreground">{selectedReferral.position}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">Relationship:</p>
-                                      <p className="text-muted-foreground capitalize">{selectedReferral.relationship?.replace('_', ' ')}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">Referred By:</p>
-                                      <p className="text-muted-foreground">{selectedReferral.referred_by_user?.full_name}</p>
+                                <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+                                  {/* Candidate Information */}
+                                  <div>
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <User className="h-4 w-4" />
+                                      Candidate Information
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Full Name:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.candidate_name}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Email Address:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.candidate_email}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Phone Number:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.candidate_phone || 'Not provided'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">LinkedIn Profile:</p>
+                                        {selectedReferral.linkedin_profile ? (
+                                          <a href={selectedReferral.linkedin_profile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all">
+                                            View Profile
+                                          </a>
+                                        ) : (
+                                          <p className="text-muted-foreground">Not provided</p>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Location Preference:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.location_preference || 'Not specified'}</p>
+                                      </div>
                                     </div>
                                   </div>
-                                  
+
+                                  {/* Position & Referral Details */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <UserPlus className="h-4 w-4" />
+                                      Position & Referral Details
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Position Applied:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.position}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Referred By:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.referred_by_user?.full_name}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Employee ID:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.referred_by_user?.employee_id || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Department:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.referred_by_user?.department?.name || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Relationship:</p>
+                                        <p className="text-muted-foreground capitalize">{selectedReferral.relationship?.replace('_', ' ') || 'Not specified'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Current Status:</p>
+                                        <div className="flex items-center gap-2">
+                                          {getStatusIcon(selectedReferral.status)}
+                                          <Badge className={getStatusBadge(selectedReferral.status)}>
+                                            {selectedReferral.status.replace('_', ' ')}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {selectedReferral.resume_url && (
+                                      <div className="mt-4">
+                                        <p className="font-medium mb-1">Resume:</p>
+                                        <a 
+                                          href={selectedReferral.resume_url} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer" 
+                                          className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
+                                        >
+                                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                          View Resume Document
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Professional Background */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2h8z" />
+                                      </svg>
+                                      Professional Background
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Current Company:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.current_company || 'Not provided'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Current Job Title:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.current_job_title || 'Not provided'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Total Experience:</p>
+                                        <p className="text-muted-foreground">
+                                          {selectedReferral.total_experience_years || 0} years, {selectedReferral.total_experience_months || 0} months
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Notice Period:</p>
+                                        <p className="text-muted-foreground">{selectedReferral.notice_period_availability || 'Not specified'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Compensation Details */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <DollarSign className="h-4 w-4" />
+                                      Compensation Details
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Current CTC:</p>
+                                        <p className="text-muted-foreground">
+                                          {selectedReferral.current_ctc ? `₹${selectedReferral.current_ctc.toLocaleString()}` : 'Not disclosed'}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Expected CTC:</p>
+                                        <p className="text-muted-foreground">
+                                          {selectedReferral.expected_ctc ? `₹${selectedReferral.expected_ctc.toLocaleString()}` : 'Not specified'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Skills & Expertise */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                      </svg>
+                                      Skills & Expertise
+                                    </h4>
+                                    <div className="space-y-3 text-sm">
+                                      <div>
+                                        <p className="font-medium mb-1">Key Technical/Functional Skills:</p>
+                                        <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                          {selectedReferral.key_skills || 'Not provided'}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium mb-1">Domain Expertise:</p>
+                                        <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                          {selectedReferral.domain_expertise || 'Not provided'}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium mb-1">Reason for Job Change:</p>
+                                        <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                          {selectedReferral.reason_for_change || 'Not provided'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Referral Bonus Information */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                      </svg>
+                                      Referral Bonus
+                                    </h4>
+                                    <div className="grid grid-cols-3 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Bonus Eligible:</p>
+                                        <p className="text-muted-foreground">
+                                          {selectedReferral.bonus_eligible ? (
+                                            <span className="text-green-600 font-medium flex items-center gap-1">
+                                              <CheckCircle className="h-3 w-3" />
+                                              Yes
+                                            </span>
+                                          ) : (
+                                            <span className="text-red-600 font-medium flex items-center gap-1">
+                                              <XCircle className="h-3 w-3" />
+                                              No
+                                            </span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Bonus Amount:</p>
+                                        <p className="text-muted-foreground font-semibold">
+                                          ${(selectedReferral.bonus_amount || 0).toLocaleString()}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Payment Status:</p>
+                                        <p className="text-muted-foreground">
+                                          {selectedReferral.bonus_amount > 0 ? (
+                                            selectedReferral.bonus_paid ? (
+                                              <span className="text-green-600 font-medium flex items-center gap-1">
+                                                <CheckCircle className="h-3 w-3" />
+                                                Paid
+                                              </span>
+                                            ) : (
+                                              <span className="text-yellow-600 font-medium flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                Pending
+                                              </span>
+                                            )
+                                          ) : (
+                                            <span className="text-gray-500">Not applicable</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Additional Information */}
                                   {selectedReferral.additional_info && (
-                                    <div>
-                                      <p className="font-medium mb-2">Additional Information:</p>
-                                      <p className="text-muted-foreground text-sm">{selectedReferral.additional_info}</p>
+                                    <div className="border-t pt-4">
+                                      <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Additional Information
+                                      </h4>
+                                      <p className="text-muted-foreground text-sm whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                        {selectedReferral.additional_info}
+                                      </p>
                                     </div>
                                   )}
 
+                                  {/* Timeline Information */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                      <Calendar className="h-4 w-4" />
+                                      Timeline
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <p className="font-medium">Submitted On:</p>
+                                        <p className="text-muted-foreground">
+                                          {format(new Date(selectedReferral.created_at), 'MMM dd, yyyy HH:mm')}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Last Updated:</p>
+                                        <p className="text-muted-foreground">
+                                          {format(new Date(selectedReferral.updated_at), 'MMM dd, yyyy HH:mm')}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">Referral ID:</p>
+                                        <p className="text-muted-foreground font-mono text-xs">{selectedReferral.id}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* HR Management */}
                                   {selectedReferral.hr_notes && (
-                                    <div>
-                                      <p className="font-medium mb-2">HR Notes:</p>
-                                      <p className="text-muted-foreground text-sm">{selectedReferral.hr_notes}</p>
+                                    <div className="border-t pt-4">
+                                      <h4 className="font-semibold mb-3 text-base flex items-center gap-2">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        HR Notes
+                                      </h4>
+                                      <p className="text-muted-foreground text-sm whitespace-pre-line bg-blue-50 p-3 rounded-md border-l-4 border-blue-200">
+                                        {selectedReferral.hr_notes}
+                                      </p>
                                     </div>
                                   )}
                                 </div>
@@ -511,112 +849,184 @@ export function ReferralDashboard() {
                 <DialogTrigger asChild>
                   <Button>Create Job Position</Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Create Job Position</DialogTitle>
-                    <DialogDescription>Define details for the new position</DialogDescription>
+                    <DialogDescription>Define comprehensive details for the new position</DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label>Title *</Label>
-                        <Input value={positionTitle} onChange={(e) => setPositionTitle(e.target.value)} placeholder="e.g., Senior React Developer" className="mt-1" />
-                      </div>
-                      <div>
-                        <Label>Department *</Label>
-                        <Select value={positionDepartmentId} onValueChange={setPositionDepartmentId}>
-                          <SelectTrigger className="mt-1">
-                            <SelectValue placeholder="Select department" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {departments?.map((d: any) => (
-                              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label>Experience Level</Label>
-                        <Select value={experienceLevel} onValueChange={setExperienceLevel}>
-                          <SelectTrigger className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="entry">Entry</SelectItem>
-                            <SelectItem value="mid">Mid</SelectItem>
-                            <SelectItem value="senior">Senior</SelectItem>
-                            <SelectItem value="lead">Lead</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Employment Type</Label>
-                        <Select value={employmentType} onValueChange={setEmploymentType}>
-                          <SelectTrigger className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="full_time">Full-time</SelectItem>
-                            <SelectItem value="part_time">Part-time</SelectItem>
-                            <SelectItem value="contract">Contract</SelectItem>
-                            <SelectItem value="internship">Internship</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label>Salary Range Min</Label>
-                        <Input type="number" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} placeholder="0" className="mt-1" />
-                      </div>
-                      <div>
-                        <Label>Salary Range Max</Label>
-                        <Input type="number" value={salaryMax} onChange={(e) => setSalaryMax(e.target.value)} placeholder="0" className="mt-1" />
+                  <div className="space-y-6">
+                    {/* Job Basics */}
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg border-b pb-2">Job Basics</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Job Title *</Label>
+                          <Input 
+                            value={jobTitle} 
+                            onChange={(e) => setJobTitle(e.target.value)} 
+                            placeholder="e.g., Senior React Developer" 
+                            className="mt-1" 
+                          />
+                        </div>
+                        <div>
+                          <Label>Department *</Label>
+                          <Select value={positionDepartmentId} onValueChange={setPositionDepartmentId}>
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {departments?.map((d: any) => (
+                                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Location</Label>
+                          <Input 
+                            value={location} 
+                            onChange={(e) => setLocation(e.target.value)} 
+                            placeholder="City, State/Country" 
+                            className="mt-1" 
+                          />
+                        </div>
+                        <div className="flex items-center gap-3 pt-6">
+                          <Switch checked={isRemote} onCheckedChange={setIsRemote} className="data-[state=unchecked]:bg-gray-300"/>
+                          <Label className="!mt-0">Remote Position</Label>
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>Work Type</Label>
+                          <Select value={workType} onValueChange={setWorkType}>
+                            <SelectTrigger className="mt-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="full_time">Full-time</SelectItem>
+                              <SelectItem value="part_time">Part-time</SelectItem>
+                              <SelectItem value="contract">Contract</SelectItem>
+                              <SelectItem value="internship">Internship</SelectItem>
+                              <SelectItem value="temporary">Temporary</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Role Overview */}
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg border-b pb-2">Role Overview</h3>
                       <div>
-                        <Label>Location</Label>
-                        <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, Country" className="mt-1" />
+                        <div className="flex items-center justify-between mb-2">
+                          <Label>Key Responsibilities</Label>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={addBulletPoint}
+                            className="flex items-center gap-1"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Add Point
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {keyResponsibilitiesBullets.map((bullet, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <span className="text-gray-500 text-sm font-medium">•</span>
+                              <Input
+                                value={bullet}
+                                onChange={(e) => updateBulletPoint(index, e.target.value)}
+                                placeholder={`Responsibility ${index + 1}...`}
+                                className="flex-1"
+                              />
+                              {keyResponsibilitiesBullets.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeBulletPoint(index)}
+                                  className="px-2"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Add specific responsibilities and duties for this role. Each point will be displayed as a bullet point.
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3 pt-6">
-                        <Switch checked={isRemote} onCheckedChange={setIsRemote} className="data-[state=unchecked]:bg-gray-300" />
-                        <Label className="!mt-0">Remote</Label>
+                    </div>
+
+                    {/* Candidate Requirements */}
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg border-b pb-2">Candidate Requirements</h3>
+                      <div>
+                        <Label>Experience Level Description</Label>
+                        <Textarea 
+                          value={experienceLevelDescription} 
+                          onChange={(e) => setExperienceLevelDescription(e.target.value)} 
+                          rows={3} 
+                          className="mt-1" 
+                          placeholder="5+ years of experience in frontend development with React..." 
+                        />
+                      </div>
+                      <div>
+                        <Label>Technical Skills Required</Label>
+                        <Textarea 
+                          value={technicalSkillsRequired} 
+                          onChange={(e) => setTechnicalSkillsRequired(e.target.value)} 
+                          rows={3} 
+                          className="mt-1" 
+                          placeholder="JavaScript, TypeScript, React, Node.js, Git..." 
+                        />
+                      </div>
+                      <div>
+                        <Label>Soft Skills</Label>
+                        <Textarea 
+                          value={softSkills} 
+                          onChange={(e) => setSoftSkills(e.target.value)} 
+                          rows={3} 
+                          className="mt-1" 
+                          placeholder="Strong communication, teamwork, problem-solving..." 
+                        />
                       </div>
                     </div>
 
-                    <div>
-                      <Label>Description</Label>
-                      <Textarea value={positionDescription} onChange={(e) => setPositionDescription(e.target.value)} rows={3} className="mt-1" placeholder="Role overview, responsibilities, etc." />
+                    {/* Application Process */}
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg border-b pb-2">Application Process</h3>
+                      <div>
+                        <Label>How to Apply</Label>
+                        <Textarea 
+                          value={howToApply} 
+                          onChange={(e) => setHowToApply(e.target.value)} 
+                          rows={3} 
+                          className="mt-1" 
+                          placeholder="Send resume to hr@company.com or apply through referral system..." 
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Application Deadline</Label>
+                          <Input 
+                            type="date" 
+                            value={applicationDeadline} 
+                            onChange={(e) => setApplicationDeadline(e.target.value)} 
+                            className="mt-1" 
+                          />
+                        </div>
+                        <div className="flex items-center gap-3 pt-6">
+                          <Switch checked={referralEncouraged} onCheckedChange={setReferralEncouraged} className="data-[state=unchecked]:bg-gray-300"/>
+                          <Label className="!mt-0">Referrals Encouraged</Label>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <Label>Requirements</Label>
-                      <Textarea value={positionRequirements} onChange={(e) => setPositionRequirements(e.target.value)} rows={3} className="mt-1" placeholder="Skills, experience, must-haves..." />
-                    </div>
-
-                    <div>
-                      <Label>Status</Label>
-                      <Select value={jobStatus} onValueChange={setJobStatus}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                          <SelectItem value="on_hold">On Hold</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 pt-4 border-t">
                       <Button variant="outline" onClick={() => setIsCreatePositionOpen(false)}>Cancel</Button>
-                      <Button onClick={handleCreatePosition} disabled={!positionTitle.trim() || !positionDepartmentId || createJobPosition.isPending}>
+                      <Button onClick={handleCreatePosition} disabled={!jobTitle.trim() || !positionDepartmentId || createJobPosition.isPending}>
                         {createJobPosition.isPending ? 'Creating...' : 'Create Position'}
                       </Button>
                     </div>
@@ -684,14 +1094,14 @@ export function ReferralDashboard() {
                 </TableHeader>
                 <TableBody>
                   {allPositions?.filter((p: any) => {
-                    const matchSearch = p.title.toLowerCase().includes(positionsSearch.toLowerCase());
+                    const matchSearch = (p.job_title || '').toLowerCase().includes(positionsSearch.toLowerCase());
                     const matchStatus = positionsStatus === 'all' ? true : p.status === positionsStatus;
                     const matchDept = positionsDepartment === 'all' ? true : (p.department_id === positionsDepartment || p.department?.id === positionsDepartment);
                     return matchSearch && matchStatus && matchDept;
                   }).map((pos: any) => (
                     <TableRow key={pos.id}>
                       <TableCell>
-                        <div className="font-medium">{pos.title}</div>
+                        <div className="font-medium">{pos.job_title}</div>
                       </TableCell>
                       <TableCell>{pos.department?.name}</TableCell>
                       <TableCell className="capitalize">{pos.experience_level?.replace('_', ' ')}</TableCell>
@@ -711,70 +1121,182 @@ export function ReferralDashboard() {
                                 <Eye className="h-4 w-4"/>
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-xl">
+                            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                               <DialogHeader>
                                 <DialogTitle>Position Details</DialogTitle>
-                                <DialogDescription>Full details</DialogDescription>
+                                <DialogDescription>Complete information about this job position</DialogDescription>
                               </DialogHeader>
-                              <div className="space-y-3 text-sm">
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <p className="font-medium">Title</p>
-                                    <p className="text-muted-foreground">{pos.title}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Department</p>
-                                    <p className="text-muted-foreground">{pos.department?.name}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Experience</p>
-                                    <p className="text-muted-foreground capitalize">{pos.experience_level?.replace('_',' ')}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Type</p>
-                                    <p className="text-muted-foreground capitalize">{pos.employment_type?.replace('_',' ')}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Salary Range</p>
-                                    <p className="text-muted-foreground">{(pos.salary_range_min ?? '—')} - {(pos.salary_range_max ?? '—')}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Location</p>
-                                    <p className="text-muted-foreground">{pos.is_remote ? 'Remote' : (pos.location || '—')}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Remote</p>
-                                    <p className="text-muted-foreground">{pos.is_remote ? 'Yes' : 'No'}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Status</p>
-                                    <p className="text-muted-foreground capitalize">{pos.status?.replace('_',' ')}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Posted By</p>
-                                    <p className="text-muted-foreground">{pos.posted_by_user?.full_name || '—'}{pos.posted_by_user?.employee_id ? ` (${pos.posted_by_user.employee_id})` : ''}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Created At</p>
-                                    <p className="text-muted-foreground">{pos.created_at ? format(new Date(pos.created_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-medium">Updated At</p>
-                                    <p className="text-muted-foreground">{pos.updated_at ? format(new Date(pos.updated_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
+                              <div className="space-y-6 text-sm">
+                                {/* Job Basics */}
+                                <div>
+                                  <h4 className="font-semibold mb-3 text-base border-b pb-2">Job Basics</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="font-medium">Job Title:</p>
+                                      <p className="text-muted-foreground">{pos.job_title}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Department:</p>
+                                      <p className="text-muted-foreground">{pos.department?.name}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Location:</p>
+                                      <p className="text-muted-foreground">{pos.location || 'Not specified'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Work Type:</p>
+                                      <p className="text-muted-foreground capitalize">{(pos.work_type || pos.employment_type)?.replace('_', ' ')}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Remote Position:</p>
+                                      <p className="text-muted-foreground">{pos.is_remote ? 'Yes' : 'No'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Status:</p>
+                                      <Badge className={pos.status === 'open' ? 'bg-green-100 text-green-800' : pos.status === 'on_hold' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}>
+                                        {pos.status?.replace('_', ' ')}
+                                      </Badge>
+                                    </div>
                                   </div>
                                 </div>
-                                {pos.description && (
-                                  <div>
-                                    <p className="font-medium">Description</p>
-                                    <p className="text-muted-foreground">{pos.description}</p>
+
+                                {/* Role Overview */}
+                                {pos.key_responsibilities && (
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base border-b pb-2">Role Overview</h4>
+                                    <div>
+                                      <p className="font-medium mb-2">Key Responsibilities:</p>
+                                      <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                        {pos.key_responsibilities}
+                                      </p>
+                                    </div>
                                   </div>
                                 )}
-                                {pos.requirements && (
-                                  <div>
-                                    <p className="font-medium">Requirements</p>
-                                    <p className="text-muted-foreground whitespace-pre-line">{pos.requirements}</p>
+
+                                {/* Candidate Requirements */}
+                                {(pos.experience_level_description || pos.technical_skills_required || pos.soft_skills) && (
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base border-b pb-2">Candidate Requirements</h4>
+                                    <div className="space-y-4">
+                                      {pos.experience_level_description && (
+                                        <div>
+                                          <p className="font-medium mb-2">Experience Level Description:</p>
+                                          <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                            {pos.experience_level_description}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {pos.technical_skills_required && (
+                                        <div>
+                                          <p className="font-medium mb-2">Technical Skills Required:</p>
+                                          <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                            {pos.technical_skills_required}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {pos.soft_skills && (
+                                        <div>
+                                          <p className="font-medium mb-2">Soft Skills:</p>
+                                          <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                            {pos.soft_skills}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
+
+                                {/* Application Process */}
+                                {(pos.how_to_apply || pos.application_deadline || pos.referral_encouraged !== undefined) && (
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base border-b pb-2">Application Process</h4>
+                                    <div className="space-y-4">
+                                      {pos.how_to_apply && (
+                                        <div>
+                                          <p className="font-medium mb-2">How to Apply:</p>
+                                          <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                            {pos.how_to_apply}
+                                          </p>
+                                        </div>
+                                      )}
+                                      <div className="grid grid-cols-2 gap-4">
+                                        {pos.application_deadline && (
+                                          <div>
+                                            <p className="font-medium">Application Deadline:</p>
+                                            <p className="text-muted-foreground">
+                                              {format(new Date(pos.application_deadline), 'MMM dd, yyyy')}
+                                            </p>
+                                          </div>
+                                        )}
+                                        {pos.referral_encouraged !== undefined && (
+                                          <div>
+                                            <p className="font-medium">Referrals Encouraged:</p>
+                                            <p className="text-muted-foreground">
+                                              {pos.referral_encouraged ? (
+                                                <span className="text-green-600 font-medium flex items-center gap-1">
+                                                  <CheckCircle className="h-3 w-3" />
+                                                  Yes
+                                                </span>
+                                              ) : (
+                                                <span className="text-red-600 font-medium flex items-center gap-1">
+                                                  <XCircle className="h-3 w-3" />
+                                                  No
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Legacy Information (if new fields not available) */}
+                                {(!pos.key_responsibilities && pos.description) && (
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base border-b pb-2">Legacy Description</h4>
+                                    <div>
+                                      <p className="font-medium mb-2">Description:</p>
+                                      <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                        {pos.description}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                {(!pos.experience_level_description && !pos.technical_skills_required && pos.requirements) && (
+                                  <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-base border-b pb-2">Legacy Requirements</h4>
+                                    <div>
+                                      <p className="font-medium mb-2">Requirements:</p>
+                                      <p className="text-muted-foreground whitespace-pre-line bg-gray-50 p-3 rounded-md">
+                                        {pos.requirements}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Administrative Information */}
+                                <div className="border-t pt-4">
+                                  <h4 className="font-semibold mb-3 text-base border-b pb-2">Administrative Information</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="font-medium">Posted By:</p>
+                                      <p className="text-muted-foreground">{pos.posted_by_user?.full_name || '—'}{pos.posted_by_user?.employee_id ? ` (${pos.posted_by_user.employee_id})` : ''}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Position ID:</p>
+                                      <p className="text-muted-foreground font-mono text-xs">{pos.id}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Created At:</p>
+                                      <p className="text-muted-foreground">{pos.created_at ? format(new Date(pos.created_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-medium">Updated At:</p>
+                                      <p className="text-muted-foreground">{pos.updated_at ? format(new Date(pos.updated_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </DialogContent>
                           </Dialog>
@@ -782,10 +1304,16 @@ export function ReferralDashboard() {
                             <DialogTrigger asChild>
                               <Button size="sm" onClick={() => {
                                 setEditingPosition(pos);
-                                setEditTitle(pos.title || '');
+                                setEditTitle(pos.job_title || '');
                                 setEditDepartmentId(pos.department_id || '');
-                                setEditDescription(pos.description || '');
-                                setEditRequirements(pos.requirements || '');
+                                setEditKeyResponsibilities(pos.key_responsibilities || '');
+                                setEditExperienceLevelDescription(pos.experience_level_description || '');
+                                setEditTechnicalSkills(pos.technical_skills_required || '');
+                                setEditSoftSkills(pos.soft_skills || '');
+                                setEditHowToApply(pos.how_to_apply || '');
+                                setEditApplicationDeadline(pos.application_deadline ? pos.application_deadline.split('T')[0] : '');
+                                setEditReferralEncouraged(pos.referral_encouraged !== undefined ? pos.referral_encouraged : true);
+                                setEditWorkType(pos.work_type || pos.employment_type || 'full_time');
                                 setEditExperienceLevel(pos.experience_level || 'mid');
                                 setEditEmploymentType(pos.employment_type || 'full_time');
                                 setEditSalaryMin(pos.salary_range_min ? String(pos.salary_range_min) : '');
@@ -793,106 +1321,239 @@ export function ReferralDashboard() {
                                 setEditLocation(pos.location || '');
                                 setEditIsRemote(!!pos.is_remote);
                                 setEditStatus(pos.status || 'open');
+                                // Legacy fields for backward compatibility
+                                setEditDescription(pos.description || '');
+                                setEditRequirements(pos.requirements || '');
                               }}>
                                 <Edit className="h-4 w-4"/>
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-2xl">
+                            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                               <DialogHeader>
                                 <DialogTitle>Edit Job Position</DialogTitle>
+                                <DialogDescription>Edit comprehensive details for this position</DialogDescription>
                               </DialogHeader>
-                              <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-6">
+                                {/* Job Basics */}
+                                <div className="space-y-4">
+                                  <h3 className="font-semibold text-lg border-b pb-2">Job Basics</h3>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Job Title *</Label>
+                                      <Input 
+                                        value={editTitle} 
+                                        onChange={(e) => setEditTitle(e.target.value)} 
+                                        placeholder="e.g., Senior React Developer" 
+                                        className="mt-1" 
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Department *</Label>
+                                      <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
+                                        <SelectTrigger className="mt-1">
+                                          <SelectValue placeholder="Select department" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {departments?.map((d: any) => (
+                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label>Location</Label>
+                                      <Input 
+                                        value={editLocation} 
+                                        onChange={(e) => setEditLocation(e.target.value)} 
+                                        placeholder="City, State/Country" 
+                                        className="mt-1" 
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-3 pt-6">
+                                      <Switch checked={editIsRemote} onCheckedChange={setEditIsRemote} className="data-[state=unchecked]:bg-gray-300"/>
+                                      <Label className="!mt-0">Remote Position</Label>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                      <Label>Work Type</Label>
+                                      <Select value={editWorkType} onValueChange={setEditWorkType}>
+                                        <SelectTrigger className="mt-1">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="full_time">Full-time</SelectItem>
+                                          <SelectItem value="part_time">Part-time</SelectItem>
+                                          <SelectItem value="contract">Contract</SelectItem>
+                                          <SelectItem value="internship">Internship</SelectItem>
+                                          <SelectItem value="temporary">Temporary</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Role Overview */}
+                                <div className="space-y-4">
+                                  <h3 className="font-semibold text-lg border-b pb-2">Role Overview</h3>
                                   <div>
-                                    <Label>Title</Label>
-                                    <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="mt-1" />
+                                    <Label>Key Responsibilities</Label>
+                                    <Textarea 
+                                      value={editKeyResponsibilities} 
+                                      onChange={(e) => setEditKeyResponsibilities(e.target.value)} 
+                                      rows={4} 
+                                      className="mt-1" 
+                                      placeholder="• Develop and maintain React applications\n• Collaborate with cross-functional teams\n• Write clean, maintainable code..." 
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Add responsibilities as bullet points. Use • for each point.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Candidate Requirements */}
+                                <div className="space-y-4">
+                                  <h3 className="font-semibold text-lg border-b pb-2">Candidate Requirements</h3>
+                                  <div>
+                                    <Label>Experience Level Description</Label>
+                                    <Textarea 
+                                      value={editExperienceLevelDescription} 
+                                      onChange={(e) => setEditExperienceLevelDescription(e.target.value)} 
+                                      rows={3} 
+                                      className="mt-1" 
+                                      placeholder="5+ years of experience in frontend development with React..." 
+                                    />
                                   </div>
                                   <div>
-                                    <Label>Department</Label>
-                                    <Select value={editDepartmentId} onValueChange={setEditDepartmentId}>
+                                    <Label>Technical Skills Required</Label>
+                                    <Textarea 
+                                      value={editTechnicalSkills} 
+                                      onChange={(e) => setEditTechnicalSkills(e.target.value)} 
+                                      rows={3} 
+                                      className="mt-1" 
+                                      placeholder="JavaScript, TypeScript, React, Node.js, Git..." 
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Soft Skills</Label>
+                                    <Textarea 
+                                      value={editSoftSkills} 
+                                      onChange={(e) => setEditSoftSkills(e.target.value)} 
+                                      rows={3} 
+                                      className="mt-1" 
+                                      placeholder="Strong communication, teamwork, problem-solving..." 
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Application Process */}
+                                <div className="space-y-4">
+                                  <h3 className="font-semibold text-lg border-b pb-2">Application Process</h3>
+                                  <div>
+                                    <Label>How to Apply</Label>
+                                    <Textarea 
+                                      value={editHowToApply} 
+                                      onChange={(e) => setEditHowToApply(e.target.value)} 
+                                      rows={3} 
+                                      className="mt-1" 
+                                      placeholder="Send resume to hr@company.com or apply through referral system..." 
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Application Deadline</Label>
+                                      <Input 
+                                        type="date" 
+                                        value={editApplicationDeadline} 
+                                        onChange={(e) => setEditApplicationDeadline(e.target.value)} 
+                                        className="mt-1" 
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-3 pt-6">
+                                      <Switch checked={editReferralEncouraged} onCheckedChange={setEditReferralEncouraged} className="data-[state=unchecked]:bg-gray-300"/>
+                                      <Label className="!mt-0">Referrals Encouraged</Label>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Additional Fields */}
+                                <div className="space-y-4">
+                                  <h3 className="font-semibold text-lg border-b pb-2">Additional Details</h3>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Experience Level</Label>
+                                      <Select value={editExperienceLevel} onValueChange={setEditExperienceLevel}>
+                                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="entry">Entry</SelectItem>
+                                          <SelectItem value="mid">Mid</SelectItem>
+                                          <SelectItem value="senior">Senior</SelectItem>
+                                          <SelectItem value="lead">Lead</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label>Employment Type</Label>
+                                      <Select value={editEmploymentType} onValueChange={setEditEmploymentType}>
+                                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="full_time">Full-time</SelectItem>
+                                          <SelectItem value="part_time">Part-time</SelectItem>
+                                          <SelectItem value="contract">Contract</SelectItem>
+                                          <SelectItem value="internship">Internship</SelectItem>
+                                          <SelectItem value="temporary">Temporary</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Salary Range Min</Label>
+                                      <Input 
+                                        type="number" 
+                                        value={editSalaryMin} 
+                                        onChange={(e) => setEditSalaryMin(e.target.value)} 
+                                        placeholder="e.g., 50000" 
+                                        className="mt-1" 
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Salary Range Max</Label>
+                                      <Input 
+                                        type="number" 
+                                        value={editSalaryMax} 
+                                        onChange={(e) => setEditSalaryMax(e.target.value)} 
+                                        placeholder="e.g., 80000" 
+                                        className="mt-1" 
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label>Status</Label>
+                                    <Select value={editStatus} onValueChange={(v) => setEditStatus(v as 'open' | 'closed' | 'on_hold')}>
                                       <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                                       <SelectContent>
-                                        {departments?.map((d: any) => (
-                                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                        ))}
+                                        <SelectItem value="open">Open</SelectItem>
+                                        <SelectItem value="on_hold">On Hold</SelectItem>
+                                        <SelectItem value="closed">Closed</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div>
-                                    <Label>Experience</Label>
-                                    <Select value={editExperienceLevel} onValueChange={setEditExperienceLevel}>
-                                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="entry">Entry</SelectItem>
-                                        <SelectItem value="mid">Mid</SelectItem>
-                                        <SelectItem value="senior">Senior</SelectItem>
-                                        <SelectItem value="lead">Lead</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label>Type</Label>
-                                    <Select value={editEmploymentType} onValueChange={setEditEmploymentType}>
-                                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="full_time">Full-time</SelectItem>
-                                        <SelectItem value="part_time">Part-time</SelectItem>
-                                        <SelectItem value="contract">Contract</SelectItem>
-                                        <SelectItem value="internship">Internship</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div>
-                                    <Label>Salary Min</Label>
-                                    <Input type="number" value={editSalaryMin} onChange={(e) => setEditSalaryMin(e.target.value)} className="mt-1" />
-                                  </div>
-                                  <div>
-                                    <Label>Salary Max</Label>
-                                    <Input type="number" value={editSalaryMax} onChange={(e) => setEditSalaryMax(e.target.value)} className="mt-1" />
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div>
-                                    <Label>Location</Label>
-                                    <Input value={editLocation} onChange={(e) => setEditLocation(e.target.value)} className="mt-1" />
-                                  </div>
-                                  <div className="flex items-center gap-3 pt-6">
-                                    <Switch checked={editIsRemote} onCheckedChange={setEditIsRemote} className="data-[state=unchecked]:bg-gray-300" />
-                                    <Label className="!mt-0">Remote</Label>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label>Description</Label>
-                                  <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className="mt-1" />
-                                </div>
-                                <div>
-                                  <Label>Requirements</Label>
-                                  <Textarea value={editRequirements} onChange={(e) => setEditRequirements(e.target.value)} rows={3} className="mt-1" />
-                                </div>
-                                <div>
-                                  <Label>Status</Label>
-                                  <Select value={editStatus} onValueChange={(v) => setEditStatus(v as 'open' | 'closed' | 'on_hold')}>
-                                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="open">Open</SelectItem>
-                                      <SelectItem value="on_hold">On Hold</SelectItem>
-                                      <SelectItem value="closed">Closed</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="flex justify-end gap-2">
+
+                                <div className="flex justify-end gap-2 pt-4 border-t">
                                   <Button variant="outline" onClick={() => { setIsEditPositionOpen(false); setEditingPosition(null); }}>Cancel</Button>
                                   <Button onClick={() => {
                                     if (!editingPosition) return;
                                     updateJobPosition.mutate({ id: editingPosition.id, updates: {
-                                      title: editTitle.trim(),
+                                      job_title: editTitle.trim(),
                                       department_id: editDepartmentId || null,
-                                      description: editDescription.trim() || null,
-                                      requirements: editRequirements.trim() || null,
+                                      key_responsibilities: editKeyResponsibilities.trim() || null,
+                                      experience_level_description: editExperienceLevelDescription.trim() || null,
+                                      technical_skills_required: editTechnicalSkills.trim() || null,
+                                      soft_skills: editSoftSkills.trim() || null,
+                                      how_to_apply: editHowToApply.trim() || null,
+                                      application_deadline: editApplicationDeadline || null,
+                                      referral_encouraged: editReferralEncouraged,
+                                      work_type: editWorkType,
                                       experience_level: editExperienceLevel,
                                       employment_type: editEmploymentType,
                                       salary_range_min: editSalaryMin ? Number(editSalaryMin) : null,

@@ -248,7 +248,24 @@ export interface Referral {
   position: string;
   resume_url?: string;
   additional_info?: string;
+  relationship?: string;
+  linkedin_profile?: string;
+  current_company?: string;
+  current_job_title?: string;
+  total_experience_years?: number;
+  total_experience_months?: number;
+  current_ctc?: number;
+  expected_ctc?: number;
+  notice_period_availability?: string;
+  reason_for_change?: string;
+  key_skills?: string;
+  domain_expertise?: string;
+  location_preference?: 'Mohali' | 'Kota';
   status: 'submitted' | 'under_review' | 'contacted' | 'hired' | 'rejected';
+  bonus_eligible?: boolean;
+  bonus_amount?: number;
+  bonus_paid?: boolean;
+  hr_notes?: string;
   created_at: string;
   updated_at: string;
 }

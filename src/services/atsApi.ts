@@ -58,7 +58,7 @@ export const atsApi = {
       .from('candidates')
       .select(`
         *,
-        position_applied_job:job_positions(title, department:departments(name)),
+        position_applied_job:job_positions(job_title, department:departments(name)),
         referred_by_user:users!referred_by(full_name, employee_id)
       `)
       .order('created_at', { ascending: false });
@@ -72,7 +72,7 @@ export const atsApi = {
       .from('candidates')
       .select(`
         *,
-        position_applied_job:job_positions(title, department:departments(name)),
+        position_applied_job:job_positions(job_title, department:departments(name)),
         referred_by_user:users!referred_by(full_name, employee_id),
         interviews(*),
         assessments(*)
@@ -90,7 +90,7 @@ export const atsApi = {
       .insert(candidateData)
       .select(`
         *,
-        position_applied_job:job_positions(title, department:departments(name))
+        position_applied_job:job_positions(job_title, department:departments(name))
       `)
       .single();
     
@@ -108,7 +108,7 @@ export const atsApi = {
       .eq('id', id)
       .select(`
         *,
-        position_applied_job:job_positions(title, department:departments(name))
+        position_applied_job:job_positions(job_title, department:departments(name))
       `)
       .single();
     
@@ -369,12 +369,42 @@ export const atsApi = {
   },
 
   async createJobPosition(positionData: any) {
+    // Prepare the data object with all new and legacy fields
+    const insertData = {
+      // New categorized fields
+      job_title: positionData.job_title,
+      work_type: positionData.work_type,
+      key_responsibilities: positionData.key_responsibilities,
+      experience_level_description: positionData.experience_level_description,
+      technical_skills_required: positionData.technical_skills_required,
+      soft_skills: positionData.soft_skills,
+      how_to_apply: positionData.how_to_apply,
+      application_deadline: positionData.application_deadline,
+      referral_encouraged: positionData.referral_encouraged,
+      // Legacy fields (maintain backward compatibility)
+      title: positionData.title,
+      department_id: positionData.department_id,
+      description: positionData.description,
+      requirements: positionData.requirements,
+      experience_level: positionData.experience_level,
+      employment_type: positionData.employment_type,
+      salary_range_min: positionData.salary_range_min,
+      salary_range_max: positionData.salary_range_max,
+      location: positionData.location,
+      is_remote: positionData.is_remote,
+      status: positionData.status,
+      posted_by: positionData.posted_by,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
     const { data, error } = await supabase
       .from('job_positions')
-      .insert(positionData)
+      .insert(insertData)
       .select(`
         *,
-        department:departments(name)
+        department:departments(name),
+        posted_by_user:users!posted_by(full_name, employee_id)
       `)
       .single();
     
@@ -385,7 +415,7 @@ export const atsApi = {
         .select('id')
         .eq('status', 'active');
       const notifyTitle = 'New Job Position Posted';
-      const notifyMessage = `${data.title} in ${data.department?.name || 'Company'}${data.location ? ' - ' + data.location : ''}`;
+      const notifyMessage = `${data.job_title} in ${data.department?.name || 'Company'}${data.location ? ' - ' + data.location : ''}`;
       await Promise.all((allUsers || []).map((u: any) => notificationApi.createNotification({
         user_id: u.id,
         title: notifyTitle,
@@ -407,12 +437,36 @@ export const atsApi = {
       .eq('id', id)
       .single();
 
+    // Prepare update data with new and legacy fields
+    const updateData = {
+      // Include any new categorized fields if provided
+      ...(updates.job_title !== undefined && { job_title: updates.job_title }),
+      ...(updates.work_type !== undefined && { work_type: updates.work_type }),
+      ...(updates.key_responsibilities !== undefined && { key_responsibilities: updates.key_responsibilities }),
+      ...(updates.experience_level_description !== undefined && { experience_level_description: updates.experience_level_description }),
+      ...(updates.technical_skills_required !== undefined && { technical_skills_required: updates.technical_skills_required }),
+      ...(updates.soft_skills !== undefined && { soft_skills: updates.soft_skills }),
+      ...(updates.how_to_apply !== undefined && { how_to_apply: updates.how_to_apply }),
+      ...(updates.application_deadline !== undefined && { application_deadline: updates.application_deadline }),
+      ...(updates.referral_encouraged !== undefined && { referral_encouraged: updates.referral_encouraged }),
+      // Legacy fields
+      ...(updates.title !== undefined && { title: updates.title }),
+      ...(updates.department_id !== undefined && { department_id: updates.department_id }),
+      ...(updates.description !== undefined && { description: updates.description }),
+      ...(updates.requirements !== undefined && { requirements: updates.requirements }),
+      ...(updates.experience_level !== undefined && { experience_level: updates.experience_level }),
+      ...(updates.employment_type !== undefined && { employment_type: updates.employment_type }),
+      ...(updates.salary_range_min !== undefined && { salary_range_min: updates.salary_range_min }),
+      ...(updates.salary_range_max !== undefined && { salary_range_max: updates.salary_range_max }),
+      ...(updates.location !== undefined && { location: updates.location }),
+      ...(updates.is_remote !== undefined && { is_remote: updates.is_remote }),
+      ...(updates.status !== undefined && { status: updates.status }),
+      updated_at: new Date().toISOString()
+    };
+
     const { data, error } = await supabase
       .from('job_positions')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
       .select(`
         *,
@@ -431,7 +485,7 @@ export const atsApi = {
           .eq('status', 'active');
         const isClosed = updates.status === 'closed';
         const notifyTitle = isClosed ? 'Job Position Closed' : 'Job Position Updated';
-        const notifyMessage = `${data.title} is now ${updates.status.replace('_',' ')}${data.location ? ' - ' + data.location : ''}`;
+        const notifyMessage = `${data.job_title} is now ${updates.status.replace('_',' ')}${data.location ? ' - ' + data.location : ''}`;
         await Promise.all((allUsers || []).map((u: any) => notificationApi.createNotification({
           user_id: u.id,
           title: notifyTitle,

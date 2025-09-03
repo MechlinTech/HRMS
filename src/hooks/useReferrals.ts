@@ -36,3 +36,46 @@ export function useCreateReferral() {
     },
   });
 }
+
+export function useCreateReferralWithResume() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: ({ referralData, resumeFile }: { 
+      referralData: any, 
+      resumeFile?: File 
+    }) => referralsApi.createReferralWithResume(referralData, resumeFile),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referrals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-referrals'] });
+      toast.success('Referral with resume submitted successfully!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to submit referral');
+      console.error('Referral with resume error:', error);
+    },
+  });
+}
+
+export function useUpdateReferralResume() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: ({ id, resumeFile, candidateName }: { 
+      id: string, 
+      resumeFile: File, 
+      candidateName: string 
+    }) => referralsApi.updateReferralResume(id, resumeFile, candidateName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referrals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-referrals'] });
+      toast.success('Resume updated successfully!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update resume');
+      console.error('Resume update error:', error);
+    },
+  });
+}

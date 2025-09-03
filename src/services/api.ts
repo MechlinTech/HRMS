@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { financeApi } from './financeApi';
 import { atsApi } from './atsApi';
 import { notificationApi } from './notificationApi';
+import { FileUploadService } from './fileUpload';
 import type { 
   User, 
   LeaveApplication, 
@@ -44,7 +45,9 @@ export const authApi = {
       'marital_status', 'date_of_marriage_anniversary', 'father_name',
       'father_dob', 'mother_name', 'mother_dob', 'designation_offer_letter',
       'permanent_address', 'aadhar_card_no', 'pan_no', 'bank_account_no',
-      'ifsc_code', 'qualification', 'employment_terms', 'date_of_joining'
+      'ifsc_code', 'qualification', 'employment_terms', 'date_of_joining',
+      // Internal columns
+      'internal_people', 'internal_payroll'
     ];
     
     const filteredUpdates = Object.keys(updates)
@@ -135,13 +138,171 @@ export const leaveApi = {
     return data;
   },
 
+  async getUserLeaveSummary(userId: string) {
+    const { data, error } = await supabase
+      .rpc('get_user_leave_summary', { p_user_id: userId });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async recalculateUserBalance(userId: string) {
+    const { data, error } = await supabase
+      .rpc('recalculate_user_leave_balance', { p_user_id: userId });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async triggerLeaveMaintenence() {
+    const { data, error } = await supabase
+      .rpc('manual_leave_maintenance');
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // New functions for HR leave balance management
+  async getAllEmployeesLeaveBalances(year: number = new Date().getFullYear()) {
+    // Use RPC function to get comprehensive leave balance data
+    const { data, error } = await supabase
+      .rpc('get_all_employees_leave_balances', { p_year: year });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async updateLeaveBalance(balanceId: string, updates: {
+    allocated_days?: number;
+    used_days?: number;
+    comments?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('leave_balances')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', balanceId)
+      .select(`
+        *,
+        leave_type:leave_types(name, description),
+        user:users(full_name, employee_id, email)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async adjustLeaveBalance(userId: string, adjustment: {
+    type: 'add' | 'subtract';
+    amount: number;
+    reason: string;
+    year?: number;
+  }, currentUserId?: string) {
+    const year = adjustment.year || new Date().getFullYear();
+    
+    // Use RPC function to handle the adjustment server-side
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('adjust_leave_balance', {
+        p_user_id: userId,
+        p_adjustment_type: adjustment.type,
+        p_amount: adjustment.amount,
+        p_reason: adjustment.reason,
+        p_year: year,
+        p_adjusted_by: currentUserId || null
+      });
+    
+    if (rpcError) {
+      console.error('RPC error:', rpcError);
+      throw rpcError;
+    }
+    
+    if (!rpcResult || rpcResult.length === 0) {
+      throw new Error('No result returned from balance adjustment');
+    }
+    
+    const result = rpcResult[0];
+    
+    if (!result.success) {
+      throw new Error(result.message || 'Failed to adjust leave balance');
+    }
+    
+    // Get the updated balance record with full details
+    const { data: balanceData, error: balanceError } = await supabase
+      .from('leave_balances')
+      .select(`
+        *,
+        leave_type:leave_types(name, description),
+        user:users(full_name, employee_id, email)
+      `)
+      .eq('id', result.balance_id)
+      .single();
+    
+    if (balanceError) {
+      console.error('Failed to fetch updated balance:', balanceError);
+      throw balanceError;
+    }
+    
+    return balanceData;
+  },
+
+  async getLeaveBalanceAdjustments(userId?: string, limit: number = 50) {
+    let query = supabase
+      .from('leave_balance_adjustments')
+      .select(`
+        *,
+        user:users!user_id(full_name, employee_id, email),
+        adjusted_by_user:users!adjusted_by(full_name, email),
+        leave_balance:leave_balances(
+          leave_type:leave_types(name)
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async createLeaveBalanceForUser(userId: string, leaveTypeId: string, allocatedDays: number, year?: number) {
+    const balanceYear = year || new Date().getFullYear();
+    
+    const { data, error } = await supabase
+      .from('leave_balances')
+      .insert({
+        user_id: userId,
+        leave_type_id: leaveTypeId,
+        year: balanceYear,
+        allocated_days: allocatedDays,
+        used_days: 0,
+        monthly_credit_rate: 0, // Will be updated by system
+        carry_forward_from_previous_year: 0
+      })
+      .select(`
+        *,
+        leave_type:leave_types(name, description),
+        user:users(full_name, employee_id, email)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
   async getLeaveApplications(userId: string) {
     const { data, error } = await supabase
       .from('leave_applications')
       .select(`
         *,
-        leave_type:leave_types!leave_type_id(name, description),
-        approved_by_user:users!approved_by(full_name)
+        leave_type:leave_types!leave_type_id(name, description)
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -166,9 +327,30 @@ export const leaveApi = {
     // No need to manually create it here
     
     return data;
+  },
+
+  async getEmployeesOnLeave(startDate?: string, endDate?: string) {
+    const today = new Date().toISOString().split('T')[0];
+    const fromDate = startDate || today;
+    const toDate = endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Next 7 days
+    
+    const { data, error } = await supabase
+      .from('leave_applications')
+      .select(`
+        *,
+        user:users!user_id(id, full_name, employee_id, avatar_url),
+        leave_type:leave_types!leave_type_id(name, description)
+      `)
+      .eq('status', 'approved')
+      .or(`and(start_date.lte.${toDate},end_date.gte.${fromDate})`) // Show overlapping leave periods
+      .order('start_date', { ascending: true });
+    
+    if (error) throw error;
+    return data;
   }
 };
 
+// Rest of the API functions remain the same...
 // Complaints API
 export const complaintsApi = {
   async getComplaintCategories() {
@@ -332,7 +514,7 @@ export const referralsApi = {
         department:departments(name)
       `)
       .eq('status', 'open')
-      .order('title');
+      .order('job_title');
     
     if (error) throw error;
     return data;
@@ -357,6 +539,95 @@ export const referralsApi = {
       .single();
     
     if (error) throw error;
+    return data;
+  },
+
+  async createReferralWithResume(referralData: Omit<Referral, 'id' | 'created_at' | 'updated_at'>, resumeFile?: File) {
+    let finalReferralData = { ...referralData };
+    
+    // Upload resume if provided
+    if (resumeFile) {
+      const uploadResult = await FileUploadService.uploadResume(
+        resumeFile, 
+        referralData.candidate_name
+      );
+      
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Failed to upload resume');
+      }
+      
+      finalReferralData.resume_url = uploadResult.url;
+    }
+    
+    const { data, error } = await supabase
+      .from('referrals')
+      .insert(finalReferralData)
+      .select()
+      .single();
+    
+    if (error) {
+      // If database insert fails and we uploaded a file, try to clean up
+      if (finalReferralData.resume_url) {
+        try {
+          await FileUploadService.deleteResume(finalReferralData.resume_url);
+        } catch (deleteError) {
+          console.error('Failed to cleanup uploaded file after database error:', deleteError);
+        }
+      }
+      throw error;
+    }
+    
+    return data;
+  },
+
+  async updateReferralResume(id: string, resumeFile: File, candidateName: string) {
+    // Get current referral to check for existing resume
+    const { data: currentReferral, error: fetchError } = await supabase
+      .from('referrals')
+      .select('resume_url')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    // Upload new resume
+    const uploadResult = await FileUploadService.uploadResume(resumeFile, candidateName);
+    
+    if (!uploadResult.success) {
+      throw new Error(uploadResult.error || 'Failed to upload resume');
+    }
+    
+    // Update referral with new resume URL
+    const { data, error } = await supabase
+      .from('referrals')
+      .update({ 
+        resume_url: uploadResult.url,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      // If database update fails, cleanup the newly uploaded file
+      try {
+        await FileUploadService.deleteResume(uploadResult.url!);
+      } catch (deleteError) {
+        console.error('Failed to cleanup uploaded file after database error:', deleteError);
+      }
+      throw error;
+    }
+    
+    // Delete old resume file if it exists
+    if (currentReferral.resume_url) {
+      try {
+        await FileUploadService.deleteResume(currentReferral.resume_url);
+      } catch (deleteError) {
+        console.warn('Failed to delete old resume file:', deleteError);
+        // Don't throw error here as the main operation succeeded
+      }
+    }
+    
     return data;
   }
 };
@@ -397,9 +668,9 @@ export const dashboardApi = {
       .eq('is_active', true);
 
     return {
-      leaveBalance: leaveBalance?.reduce((sum, lb) => sum + lb.remaining_days, 0) || 0,
+      leaveBalance: leaveBalance?.reduce((sum: any, lb: any) => sum + lb.remaining_days, 0) || 0,
       attendance: attendance ? `${attendance.days_present}/${attendance.total_working_days}` : '0/0',
-      activeGoals: goals?.filter(g => g.status !== 'completed').length || 0,
+      activeGoals: goals?.filter((g: any) => g.status !== 'completed').length || 0,
       activeProjects: projects?.length || 0
     };
   },
@@ -492,32 +763,222 @@ export const exitApi = {
 export const employeeApi = {
   async getAllEmployees() {
     const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        role:roles(name, description),
-        department:departments!users_department_id_fkey(name, description)
-      `)
-      .neq('status', 'inactive')
-      .order('full_name');
+      .rpc('get_employees_with_manager_details');
     
     if (error) throw error;
-    return data;
+    
+    // Transform the data to match the expected structure
+    return data?.map((row: any) => ({
+      id: row.id,
+      auth_provider: row.auth_provider,
+      provider_user_id: row.provider_user_id,
+      email: row.email,
+      password_hash: row.password_hash,
+      full_name: row.full_name,
+      employee_id: row.employee_id,
+      role_id: row.role_id,
+      department_id: row.department_id,
+      position: row.position,
+      avatar_url: row.avatar_url,
+      phone: row.phone,
+      address: row.address,
+      date_of_birth: row.date_of_birth,
+      date_of_joining: row.date_of_joining,
+      salary: row.salary,
+      extra_permissions: row.extra_permissions,
+      status: row.status,
+      last_login: row.last_login,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      manager_id: row.manager_id,
+      tenure_mechlin: row.tenure_mechlin,
+      level_grade: row.level_grade,
+      skill: row.skill,
+      current_office_location: row.current_office_location,
+      alternate_contact_no: row.alternate_contact_no,
+      blood_group: row.blood_group,
+      religion: row.religion,
+      gender: row.gender,
+      marital_status: row.marital_status,
+      date_of_marriage_anniversary: row.date_of_marriage_anniversary,
+      father_name: row.father_name,
+      father_dob: row.father_dob,
+      mother_name: row.mother_name,
+      mother_dob: row.mother_dob,
+      designation_offer_letter: row.designation_offer_letter,
+      permanent_address: row.permanent_address,
+      aadhar_card_no: row.aadhar_card_no,
+      pan_no: row.pan_no,
+      personal_email: row.personal_email,
+      bank_account_no: row.bank_account_no,
+      ifsc_code: row.ifsc_code,
+      qualification: row.qualification,
+      employment_terms: row.employment_terms,
+      internal_people: row.internal_people,
+      internal_payroll: row.internal_payroll,
+      role: row.role_name ? {
+        name: row.role_name,
+        description: row.role_description
+      } : null,
+      department: row.department_name ? {
+        name: row.department_name,
+        description: row.department_description
+      } : null,
+      manager: row.manager_full_name ? {
+        id: row.manager_id,
+        full_name: row.manager_full_name,
+        email: row.manager_email,
+        position: row.manager_position
+      } : null
+    })) || [];
+  },
+
+  async getAllUsersDetails() {
+    const { data, error } = await supabase
+      .rpc('get_all_users_with_manager_details');
+    
+    if (error) throw error;
+    
+    // Transform the data to match the expected structure
+    return data?.map((row: any) => ({
+      id: row.id,
+      auth_provider: row.auth_provider,
+      provider_user_id: row.provider_user_id,
+      email: row.email,
+      password_hash: row.password_hash,
+      full_name: row.full_name,
+      employee_id: row.employee_id,
+      role_id: row.role_id,
+      department_id: row.department_id,
+      position: row.position,
+      avatar_url: row.avatar_url,
+      phone: row.phone,
+      address: row.address,
+      date_of_birth: row.date_of_birth,
+      date_of_joining: row.date_of_joining,
+      salary: row.salary,
+      extra_permissions: row.extra_permissions,
+      status: row.status,
+      last_login: row.last_login,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      manager_id: row.manager_id,
+      tenure_mechlin: row.tenure_mechlin,
+      level_grade: row.level_grade,
+      skill: row.skill,
+      current_office_location: row.current_office_location,
+      alternate_contact_no: row.alternate_contact_no,
+      blood_group: row.blood_group,
+      religion: row.religion,
+      gender: row.gender,
+      marital_status: row.marital_status,
+      date_of_marriage_anniversary: row.date_of_marriage_anniversary,
+      father_name: row.father_name,
+      father_dob: row.father_dob,
+      mother_name: row.mother_name,
+      mother_dob: row.mother_dob,
+      designation_offer_letter: row.designation_offer_letter,
+      permanent_address: row.permanent_address,
+      aadhar_card_no: row.aadhar_card_no,
+      pan_no: row.pan_no,
+      personal_email: row.personal_email,
+      bank_account_no: row.bank_account_no,
+      ifsc_code: row.ifsc_code,
+      qualification: row.qualification,
+      employment_terms: row.employment_terms,
+      internal_people: row.internal_people,
+      internal_payroll: row.internal_payroll,
+      role: row.role_name ? {
+        name: row.role_name,
+        description: row.role_description
+      } : null,
+      department: row.department_name ? {
+        name: row.department_name,
+        description: row.department_description
+      } : null,
+      manager: row.manager_full_name ? {
+        id: row.manager_id,
+        full_name: row.manager_full_name,
+        email: row.manager_email,
+        position: row.manager_position
+      } : null
+    })) || [];
   },
 
   async getEmployeeById(id: string) {
     const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        role:roles(name, description),
-        department:departments!users_department_id_fkey(name, description)
-      `)
-      .eq('id', id)
-      .single();
+      .rpc('get_all_users_with_manager_details');
     
     if (error) throw error;
-    return data;
+    
+    // Find the specific employee
+    const employee = data?.find((row: any) => row.id === id);
+    if (!employee) throw new Error('Employee not found');
+    
+    // Transform the data to match the expected structure
+    return {
+      id: employee.id,
+      auth_provider: employee.auth_provider,
+      provider_user_id: employee.provider_user_id,
+      email: employee.email,
+      password_hash: employee.password_hash,
+      full_name: employee.full_name,
+      employee_id: employee.employee_id,
+      role_id: employee.role_id,
+      department_id: employee.department_id,
+      position: employee.position,
+      avatar_url: employee.avatar_url,
+      phone: employee.phone,
+      address: employee.address,
+      date_of_birth: employee.date_of_birth,
+      date_of_joining: employee.date_of_joining,
+      salary: employee.salary,
+      extra_permissions: employee.extra_permissions,
+      status: employee.status,
+      last_login: employee.last_login,
+      created_at: employee.created_at,
+      updated_at: employee.updated_at,
+      manager_id: employee.manager_id,
+      tenure_mechlin: employee.tenure_mechlin,
+      level_grade: employee.level_grade,
+      skill: employee.skill,
+      current_office_location: employee.current_office_location,
+      alternate_contact_no: employee.alternate_contact_no,
+      blood_group: employee.blood_group,
+      religion: employee.religion,
+      gender: employee.gender,
+      marital_status: employee.marital_status,
+      date_of_marriage_anniversary: employee.date_of_marriage_anniversary,
+      father_name: employee.father_name,
+      father_dob: employee.father_dob,
+      mother_name: employee.mother_name,
+      mother_dob: employee.mother_dob,
+      designation_offer_letter: employee.designation_offer_letter,
+      permanent_address: employee.permanent_address,
+      aadhar_card_no: employee.aadhar_card_no,
+      pan_no: employee.pan_no,
+      personal_email: employee.personal_email,
+      bank_account_no: employee.bank_account_no,
+      ifsc_code: employee.ifsc_code,
+      qualification: employee.qualification,
+      employment_terms: employee.employment_terms,
+      internal_people: employee.internal_people,
+      internal_payroll: employee.internal_payroll,
+      role: employee.role_name ? {
+        name: employee.role_name,
+        description: employee.role_description
+      } : null,
+      department: employee.department_name ? {
+        name: employee.department_name,
+        description: employee.department_description
+      } : null,
+      manager: employee.manager_full_name ? {
+        id: employee.manager_id,
+        full_name: employee.manager_full_name,
+        email: employee.manager_email,
+        position: employee.manager_position
+      } : null
+    };
   },
 
   async getEmployeeAttendance(userId: string, year: number = new Date().getFullYear()) {
@@ -706,7 +1167,7 @@ export const assetApi = {
       .eq('is_active', true);
     
     // Get assets by status
-    const assetsByStatus = totalAssets?.reduce((acc, asset) => {
+    const assetsByStatus = totalAssets?.reduce((acc: any, asset: any) => {
       acc[asset.status] = (acc[asset.status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>) || {};
@@ -729,7 +1190,7 @@ export const hrReferralsApi = {
       .from('referrals')
       .select(`
         *,
-        referred_by_user:users!referred_by(full_name, employee_id)
+        referred_by_user:users!referred_by(full_name, employee_id, email, department:departments!users_department_id_fkey(name))
       `)
       .order('created_at', { ascending: false });
     
@@ -748,7 +1209,7 @@ export const hrReferralsApi = {
       .eq('id', id)
       .select(`
         *,
-        referred_by_user:users!referred_by(full_name, employee_id)
+        referred_by_user:users!referred_by(full_name, employee_id, email, department:departments!users_department_id_fkey(name))
       `)
       .single();
     
@@ -1176,7 +1637,7 @@ export const bdTeamApi = {
       .select('client_name')
       .gte('contract_end_date', new Date().toISOString().split('T')[0]);
     
-    const activeClients = new Set(billingRecords?.map(r => r.client_name)).size;
+    const activeClients = new Set(billingRecords?.map((r: any) => r.client_name)).size;
 
     // Get unpaid invoices
     const { data: unpaidInvoices } = await supabase
@@ -1184,7 +1645,7 @@ export const bdTeamApi = {
       .select('invoice_amount')
       .in('status', ['assigned', 'in_progress', 'sent']);
     
-    const unpaidAmount = unpaidInvoices?.reduce((sum, inv) => sum + inv.invoice_amount, 0) || 0;
+    const unpaidAmount = unpaidInvoices?.reduce((sum: any, inv: any) => sum + inv.invoice_amount, 0) || 0;
     const unpaidCount = unpaidInvoices?.length || 0;
 
     // Get overdue invoices
@@ -1201,7 +1662,7 @@ export const bdTeamApi = {
       .from('billing_records')
       .select('contract_value');
     
-    const totalContractValue = totalContracts?.reduce((sum, record) => sum + record.contract_value, 0) || 0;
+    const totalContractValue = totalContracts?.reduce((sum: any, record: any) => sum + record.contract_value, 0) || 0;
 
     return {
       activeClients,

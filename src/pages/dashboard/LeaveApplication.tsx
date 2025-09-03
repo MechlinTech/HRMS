@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLeaveTypes, useLeaveBalance, useLeaveApplications, useCreateLeaveApplication } from '@/hooks/useLeave';
+import { useLeaveTypes, useLeaveBalance, useLeaveApplications, useCreateLeaveApplication, useEmployeesOnLeave, useUserLeaveSummary, useRecalculateUserBalance } from '@/hooks/useLeave';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -22,7 +23,11 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Info
+  Info,
+  Users,
+  RefreshCw,
+  Calculator,
+  TrendingUp
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -47,7 +52,10 @@ export function LeaveApplication() {
   const { data: leaveBalance, isLoading: balanceLoading } = useLeaveBalance();
   const { data: leaveHistory, isLoading: historyLoading } = useLeaveApplications();
   const { data: holidays, isLoading: holidaysLoading } = useUpcomingHolidays();
+  const { data: employeesOnLeave, isLoading: onLeaveLoading } = useEmployeesOnLeave();
+  const { data: leaveSummary, isLoading: summaryLoading } = useUserLeaveSummary();
   const createLeaveApplication = useCreateLeaveApplication();
+  const recalculateBalance = useRecalculateUserBalance();
   
   const [selectedType, setSelectedType] = useState('');
   const [startDate, setStartDate] = useState<Date>();
@@ -103,11 +111,41 @@ export function LeaveApplication() {
     }
 
     const daysRequested = calculateDays();
-    const userBalance = leaveBalance?.find(lb => lb.leave_type_id === leaveType.id);
     
-    if (userBalance && daysRequested > userBalance.remaining_days) {
-      toast.error(`Insufficient leave balance. You have ${userBalance.remaining_days} days remaining.`);
-      return;
+    // Use enhanced balance information if available
+    const remainingDays = leaveSummary?.success 
+      ? leaveSummary.balance?.remaining_days || 0
+      : totalLeaveBalance - usedLeave;
+    
+    // Check tenure and provide appropriate warnings
+    const tenureMonths = leaveSummary?.user?.tenure_months || 0;
+    const isEligibleForPaidLeaves = leaveSummary?.rules?.eligible_for_paid_leaves;
+    
+    // Warning for users with < 9 months tenure (all leave will be salary deduction)
+    if (tenureMonths < 9 || !isEligibleForPaidLeaves) {
+      const shouldProceed = window.confirm(
+        `You have ${tenureMonths} months of tenure. Since your tenure is less than 9 months, ` +
+        `ALL ${daysRequested} days will be deducted from your salary. ` +
+        `Do you want to proceed with this unpaid leave application?`
+      );
+      if (!shouldProceed) return;
+    }
+    // Warning for users with paid leave balance but requesting more than available
+    else if (daysRequested > remainingDays && remainingDays >= 0) {
+      const excessDays = daysRequested - remainingDays;
+      const shouldProceed = window.confirm(
+        `This request uses your ${remainingDays} available paid leave days plus ${excessDays} additional days. ` +
+        `The ${excessDays} excess days will be deducted from your salary. Do you want to proceed?`
+      );
+      if (!shouldProceed) return;
+    }
+    // For users with negative balance (already over their limit)
+    else if (remainingDays < 0) {
+      const shouldProceed = window.confirm(
+        `Your leave balance is already negative (${remainingDays} days). ` +
+        `All ${daysRequested} requested days will be deducted from your salary. Do you want to proceed?`
+      );
+      if (!shouldProceed) return;
     }
 
     createLeaveApplication.mutate({
@@ -179,13 +217,12 @@ export function LeaveApplication() {
                         </SelectTrigger>
                         <SelectContent>
                           {leaveTypes?.map((type) => {
-                            const balance = leaveBalance?.find(lb => lb.leave_type_id === type.id);
                             const typeKey = type.name.toLowerCase().replace(' ', '_');
                             return (
                             <SelectItem key={type.id} value={typeKey}>
                               <div className="flex items-center gap-2">
                                 <div className={`w-3 h-3 rounded-full ${leaveTypeColors[typeKey as keyof typeof leaveTypeColors] || 'bg-gray-500'}`} />
-                                {type.name} ({balance?.remaining_days || 0} days available)
+                                {type.name}
                               </div>
                             </SelectItem>
                             );
@@ -285,30 +322,124 @@ export function LeaveApplication() {
 
             <div className="space-y-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Quick Stats</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Leave Balance
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => recalculateBalance.mutate()}
+                    disabled={recalculateBalance.isPending}
+                    className="h-8 w-8 p-0"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", recalculateBalance.isPending && "animate-spin")} />
+                  </Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Total Leave Balance</span>
-                      <span>{totalLeaveBalance} days</span>
-                    </div>
-                    <Progress value={((totalLeaveBalance - usedLeave) / totalLeaveBalance) * 100} />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Used This Year</span>
-                      <span>{usedLeave} days</span>
-                    </div>
-                    <Progress value={(usedLeave / totalLeaveBalance) * 100} className="bg-red-100" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Remaining</span>
-                      <span>{totalLeaveBalance - usedLeave} days</span>
-                    </div>
-                  </div>
+                  {summaryLoading ? (
+                    <LoadingSpinner size="sm" />
+                  ) : leaveSummary?.success ? (
+                    <>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Total Leave Balance</span>
+                          <span>{leaveSummary.balance?.allocated_days || totalLeaveBalance} days</span>
+                        </div>
+                        <Progress value={leaveSummary.balance?.allocated_days > 0 ? 
+                          ((leaveSummary.balance.allocated_days - (leaveSummary.balance.used_days || 0)) / leaveSummary.balance.allocated_days) * 100 : 0} />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Used This Year</span>
+                          <span>{leaveSummary.balance?.used_days || usedLeave} days</span>
+                        </div>
+                        <Progress 
+                          value={leaveSummary.balance?.allocated_days > 0 ? 
+                            ((leaveSummary.balance.used_days || 0) / leaveSummary.balance.allocated_days) * 100 : 0} 
+                          className="bg-red-100" 
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Remaining</span>
+                          <span className={cn(
+                            "font-medium",
+                            (leaveSummary.balance?.remaining_days || 0) < 0 ? "text-red-600" : "text-green-600"
+                          )}>
+                            {leaveSummary.balance?.remaining_days || (totalLeaveBalance - usedLeave)} days
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Enhanced Information */}
+                      <div className="border-t pt-3 space-y-2">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Monthly Rate</span>
+                          <span>{leaveSummary.rules?.current_monthly_rate || 0} days/month</span>
+                        </div>
+                        
+                        {leaveSummary.balance?.carry_forward_from_previous_year > 0 && (
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Carried Forward</span>
+                            <span>{leaveSummary.balance.carry_forward_from_previous_year} days</span>
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Tenure</span>
+                          <span>{leaveSummary.user?.tenure_months || 0} months</span>
+                        </div>
+                        
+                        {/* Salary deduction warning for < 9 months tenure */}
+                        {leaveSummary.rules?.salary_deduction_warning && (
+                          <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 p-2 rounded">
+                            <AlertCircle className="h-3 w-3" />
+                            <span>{leaveSummary.rules.salary_deduction_warning}</span>
+                          </div>
+                        )}
+                        
+                        {leaveSummary.rules?.next_credit_date && leaveSummary.rules?.eligible_for_paid_leaves && (
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Next Credit</span>
+                            <span>{format(new Date(leaveSummary.rules.next_credit_date), 'MMM dd')}</span>
+                          </div>
+                        )}
+                        
+                        {!leaveSummary.rules?.can_carry_forward && leaveSummary.balance?.anniversary_reset_date && (
+                          <div className="flex items-center gap-1 text-xs text-amber-600">
+                            <AlertCircle className="h-3 w-3" />
+                            <span>Resets on {format(new Date(leaveSummary.balance.anniversary_reset_date), 'MMM dd, yyyy')}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    // Fallback to original display
+                    <>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Total Leave Balance</span>
+                          <span>{totalLeaveBalance} days</span>
+                        </div>
+                        <Progress value={((totalLeaveBalance - usedLeave) / totalLeaveBalance) * 100} />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Used This Year</span>
+                          <span>{usedLeave} days</span>
+                        </div>
+                        <Progress value={(usedLeave / totalLeaveBalance) * 100} className="bg-red-100" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Remaining</span>
+                          <span>{totalLeaveBalance - usedLeave} days</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -335,11 +466,129 @@ export function LeaveApplication() {
                   )}
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Who's On Leave
+                  </CardTitle>
+                  <CardDescription>
+                    All employees on leave today and upcoming days
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {onLeaveLoading ? (
+                    <LoadingSpinner size="sm" />
+                  ) : employeesOnLeave && employeesOnLeave.length > 0 ? (
+                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                      {employeesOnLeave.map((leave: any) => {
+                        const isCurrentUser = leave.user?.id === user?.id;
+                        return (
+                        <div 
+                          key={leave.id} 
+                          className={`flex items-center gap-3 p-2 rounded-lg border ${
+                            isCurrentUser 
+                              ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' 
+                              : 'bg-white/50'
+                          }`}
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={leave.user?.avatar_url} />
+                            <AvatarFallback>
+                              {leave.user?.full_name?.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {leave.user?.full_name}
+                              {isCurrentUser && (
+                                <span className="ml-2 text-xs text-blue-600 font-semibold">(You)</span>
+                              )}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>{leave.leave_type?.name}</span>
+                              <span>•</span>
+                              <span>
+                                {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd')}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="secondary" className="text-xs">
+                              {leave.days_count} day{leave.days_count !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                        </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        No employees on leave
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
         </TabsContent>
 
         <TabsContent value="balance" className="space-y-6">
+          {/* Leave Rules Information */}
+          {leaveSummary?.success && (
+            <Card className="bg-blue-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-800">
+                  <Info className="h-5 w-5" />
+                  Your Leave Entitlements
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p><strong>Current Status:</strong></p>
+                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                      <li>Tenure: {leaveSummary.user?.tenure_months || 0} months</li>
+                      <li>Monthly Rate: {leaveSummary.rules?.current_monthly_rate || 0} days/month</li>
+                      <li>Can Carry Forward: {leaveSummary.rules?.can_carry_forward ? 'Yes' : 'No'}</li>
+                      <li>Leave Applications: Always allowed</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p><strong>Leave Rules:</strong></p>
+                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                      <li>&lt; 9 months: Can apply (salary deducted)</li>
+                      <li>9-11 months: 1 leave/month</li>
+                      <li>12+ months: 1.5 leaves/month</li>
+                      <li>2+ years: Can carry forward</li>
+                    </ul>
+                  </div>
+                </div>
+                {leaveSummary.rules?.salary_deduction_warning && (
+                  <Alert className="mt-3 border-orange-200 bg-orange-50">
+                    <AlertCircle className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-orange-800">
+                      <strong>Salary Deduction Notice:</strong> {leaveSummary.rules.salary_deduction_warning}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {leaveSummary.balance?.anniversary_reset_date && !leaveSummary.rules?.can_carry_forward && (
+                  <Alert className="mt-3">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Your leave balance will reset on {format(new Date(leaveSummary.balance.anniversary_reset_date), 'MMMM dd, yyyy')} 
+                      (your work anniversary). Unused leaves will be forfeited.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {balanceLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
@@ -398,6 +647,7 @@ export function LeaveApplication() {
                       <TableHead>Days</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Comments</TableHead>
                       <TableHead>Applied</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -417,6 +667,15 @@ export function LeaveApplication() {
                               {leave.status}
                             </Badge>
                           </div>
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          {leave.comments ? (
+                            <div className="text-sm text-gray-600 truncate" title={leave.comments}>
+                              {leave.comments}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">No comments</span>
+                          )}
                         </TableCell>
                         <TableCell>{format(new Date(leave.applied_at), 'MMM dd, yyyy')}</TableCell>
                       </TableRow>

@@ -541,79 +541,62 @@ export function DashboardOverview() {
                     const startTime = new Date(entry.start_time);
                     const now = new Date();
                     
-                    // Check if this is an ongoing session (no end_time)
-                    const isOngoing = !entry.end_time;
+                    // Get comprehensive duration information using database duration
+                    const duration = secondTimeApi.getDurationInfo(entry);
                     
-                    // Calculate duration
-                    let durationHours = 0;
-                    let endTime = startTime;
-                    
-                    if (entry.end_time) {
-                      endTime = new Date(entry.end_time);
-                      const durationMs = endTime.getTime() - startTime.getTime();
-                      durationHours = durationMs / (1000 * 60 * 60);
-                    } else {
-                      // Ongoing session: current time - start time
-                      const durationMs = now.getTime() - startTime.getTime();
-                      durationHours = durationMs / (1000 * 60 * 60);
-                      endTime = now;
-                    }
-                    
-                    const durationMinutes = (durationHours % 1) * 60;
-                    
-                    // Format duration nicely
-                    const formatDuration = (hours: number, minutes: number) => {
-                      if (hours >= 1) {
-                        return `${Math.floor(hours)}h ${Math.round(minutes)}m`;
-                      } else {
-                        return `${Math.round(minutes)}m`;
-                      }
-                    };
+                    // Calculate end time from start_time + duration
+                    const endTime = new Date(startTime.getTime() + (duration.seconds * 1000));
                     
                     return (
                       <div key={entry.id} className={`flex items-center justify-between p-4 border rounded-xl backdrop-blur-sm hover:shadow-md transition-all ${
-                        isOngoing 
+                        duration.isOngoing 
                           ? 'border-orange-300 bg-orange-50/30' 
                           : 'border-blue-200/30 bg-white/50'
                       }`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <div className={`text-lg font-mono font-bold ${
-                              isOngoing ? 'text-orange-600' : 'text-blue-600'
+                              duration.isOngoing ? 'text-orange-600' : 'text-blue-600'
                             }`}>
-                              {formatDuration(durationHours, durationMinutes)}
+                              {duration.formatted}
                             </div>
                             <Badge variant="outline" className={
-                              isOngoing 
+                              duration.isOngoing 
                                 ? 'border-orange-200/50 bg-orange-50/50 text-orange-700'
                                 : 'border-blue-200/50 bg-blue-50/50'
                             }>
-                              {isOngoing ? 'Ongoing' : 
-                                durationHours >= 8 ? 'Full Day' : 
-                                durationHours >= 4 ? 'Half Day' : 'Partial'
+                              {duration.isOngoing ? 'Ongoing' : 
+                                duration.hours >= 8 ? 'Full Day' : 
+                                duration.hours >= 4 ? 'Half Day' : 'Partial'
                               }
                             </Badge>
                           </div>
                           <p className="text-sm font-medium text-gray-800">
                             {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {
-                              isOngoing 
+                              duration.isOngoing 
                                 ? 'Now (ongoing)' 
                                 : endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                             }
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
                             Entry ID: {entry.id.slice(0, 8)} • {startTime.toLocaleDateString()}
-                            {isOngoing && <span className="text-orange-600 font-medium"> • Live Session</span>}
+                            {duration.isOngoing && <span className="text-orange-600 font-medium"> • Live Session</span>}
                           </p>
                         </div>
                         <div className="text-right">
                           <div className={`text-2xl font-mono font-bold ${
-                            isOngoing ? 'text-orange-600' : 'text-green-600'
+                            duration.isOngoing ? 'text-orange-600' : 'text-green-600'
                           }`}>
-                            {durationHours.toFixed(1)}h
+                            {duration.hours.toFixed(1)}h
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {duration.isOngoing ? 'Live' : 'Total'} • {duration.seconds}s
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {isOngoing ? 'Live' : 'Total'}
+                            Started: {startTime.toLocaleDateString([], { 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
                           </p>
                         </div>
                       </div>

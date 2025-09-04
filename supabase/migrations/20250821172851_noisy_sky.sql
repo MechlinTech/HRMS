@@ -110,23 +110,6 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id_created_at ON notifications
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id_is_read ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
 
--- Add notification type constraint
-ALTER TABLE notifications ADD CONSTRAINT notifications_type_check 
-CHECK (type = ANY(ARRAY[
-  'general',
-  'leave_request_submitted',
-  'leave_request_approved', 
-  'leave_request_rejected',
-  'complaint_submitted',
-  'complaint_resolved',
-  'performance_goal_assigned',
-  'interview_scheduled',
-  'assessment_assigned',
-  'exit_process_initiated',
-  'document_approved',
-  'document_rejected'
-]));
-
 -- Function to create notification with push notification
 CREATE OR REPLACE FUNCTION create_notification(
   p_user_id uuid,

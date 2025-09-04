@@ -104,36 +104,6 @@ $$ LANGUAGE plpgsql;
 -- Add RLS policies for the new functions (ensure only authorized users can call them)
 -- These functions should be callable by HR and admin users
 
--- Create a view for HR to monitor leave balance status
-CREATE OR REPLACE VIEW leave_balance_summary AS
-SELECT 
-  u.id as user_id,
-  u.full_name,
-  u.employee_id,
-  u.date_of_joining,
-  u.status as user_status,
-  get_tenure_months(u.date_of_joining) as tenure_months,
-  get_monthly_leave_rate(u.date_of_joining) as monthly_rate,
-  can_carry_forward_leaves(u.date_of_joining) as can_carry_forward,
-  lb.year,
-  lb.allocated_days,
-  lb.used_days,
-  lb.remaining_days,
-  lb.carry_forward_from_previous_year,
-  lb.anniversary_reset_date,
-  lb.last_credited_month,
-  lt.name as leave_type_name
-FROM users u
-LEFT JOIN leave_balances lb ON u.id = lb.user_id 
-  AND lb.year = EXTRACT(YEAR FROM CURRENT_DATE)
-LEFT JOIN leave_types lt ON lb.leave_type_id = lt.id
-WHERE u.status = 'active' 
-  AND u.date_of_joining IS NOT NULL
-ORDER BY u.full_name;
-
--- Enable RLS on the view
-ALTER VIEW leave_balance_summary OWNER TO postgres;
-
 -- Create policy for the view (HR and admin can see all, others can see only their own)
 CREATE POLICY "leave_balance_summary_policy" ON leave_balances
 FOR SELECT TO authenticated
@@ -153,4 +123,3 @@ COMMENT ON FUNCTION maintain_leave_balances() IS 'Main scheduled function that h
 COMMENT ON FUNCTION recalculate_user_leave_balance(uuid) IS 'Manually recalculates leave balance for a specific user and returns detailed result';
 COMMENT ON FUNCTION get_user_leave_summary(uuid) IS 'Returns comprehensive leave balance information for a user';
 COMMENT ON FUNCTION manual_leave_maintenance() IS 'Manually triggers all leave balance maintenance operations';
-COMMENT ON VIEW leave_balance_summary IS 'HR view showing leave balance status for all active users';

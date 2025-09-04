@@ -10,10 +10,6 @@ CREATE TABLE IF NOT EXISTS new_projects (
   end_date DATE
 );
 
--- Add foreign key constraint for created_by to reference public.users
-ALTER TABLE new_projects ADD CONSTRAINT new_projects_created_by_fkey 
-FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
-
 -- Modify existing project_assignments table to support the new structure
 -- Add role_type column if it doesn't exist
 DO $$ 

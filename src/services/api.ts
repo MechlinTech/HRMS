@@ -46,8 +46,6 @@ export const authApi = {
       'father_dob', 'mother_name', 'mother_dob', 'designation_offer_letter',
       'permanent_address', 'aadhar_card_no', 'pan_no', 'bank_account_no',
       'ifsc_code', 'qualification', 'employment_terms', 'date_of_joining',
-      // Internal columns
-      'internal_people', 'internal_payroll'
     ];
     
     const filteredUpdates = Object.keys(updates)
@@ -814,8 +812,6 @@ export const employeeApi = {
       ifsc_code: row.ifsc_code,
       qualification: row.qualification,
       employment_terms: row.employment_terms,
-      internal_people: row.internal_people,
-      internal_payroll: row.internal_payroll,
       role: row.role_name ? {
         name: row.role_name,
         description: row.role_description
@@ -886,8 +882,6 @@ export const employeeApi = {
       ifsc_code: row.ifsc_code,
       qualification: row.qualification,
       employment_terms: row.employment_terms,
-      internal_people: row.internal_people,
-      internal_payroll: row.internal_payroll,
       role: row.role_name ? {
         name: row.role_name,
         description: row.role_description
@@ -962,8 +956,6 @@ export const employeeApi = {
       ifsc_code: employee.ifsc_code,
       qualification: employee.qualification,
       employment_terms: employee.employment_terms,
-      internal_people: employee.internal_people,
-      internal_payroll: employee.internal_payroll,
       role: employee.role_name ? {
         name: employee.role_name,
         description: employee.role_description

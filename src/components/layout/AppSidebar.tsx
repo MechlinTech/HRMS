@@ -9,6 +9,7 @@ import {
   AvatarImage,
 } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import square_logo from '../../assets/square_logo.svg'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,8 +120,11 @@ export function AppSidebar({ isCollapsed, onToggle, currentDashboard }: AppSideb
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg">
+              {/* <div className="p-1.5 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg">
                 <Building2 className="h-5 w-5 text-white" />
+              </div> */}
+              <div className="h-10 w-10">
+                <img src={square_logo} alt="square logo"></img>
               </div>
               <span className="font-bold text-lg bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">Mechlin HRMS</span>
             </div>

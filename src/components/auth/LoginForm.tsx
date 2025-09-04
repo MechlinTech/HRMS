@@ -11,6 +11,8 @@ import { SignupForm } from './SignupForm';
 import { loginRequest } from '@/auth/authConfig';
 import { useMsal } from '@azure/msal-react';
 import { msalInstance } from '@/hooks/MsalAuthProvider';
+import mechlin_logo from '../../assets/mechlin_logo.svg';
+import square_logo from '../../assets/square_logo.svg';
 
 export function LoginForm() {
   const { login, loginWithProvider, user } = useAuth();
@@ -215,18 +217,25 @@ export function LoginForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Mechlin HRMS</CardTitle>
+        <CardHeader className="text-center items-center justify-center align-center">
+          <CardTitle className="border border-orange-200/50 bg-white/70 backdrop-blur-sm shadow-md shadow-orange-100/20 p-3 px-4 rounded-xl">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10">
+                <img src={square_logo} alt="square logo"></img>
+              </div>
+              <span className="font-bold text-2xl bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">MECHLIN</span>
+            </div>
+          </CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* {showInactivityMessage && (
+          {showInactivityMessage && (
             <Alert variant="default" className="border-amber-200 bg-amber-50">
               <AlertDescription className="text-amber-800">
                 You were logged out due to 10 minutes of inactivity. Please sign in again.
               </AlertDescription>
             </Alert>
-          )} */}
+          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -293,14 +302,14 @@ export function LoginForm() {
                 onClick={handleMSLoginRedirect}
                 disabled={loading}
                 className="w-full"
-                variant="outline"
+                variant="default"
               >
                 <Building2 className="mr-2 h-4 w-4" />
                 Sign in with Microsoft
               </Button>
             )}
 
-            <Button
+            {/* <Button
               onClick={() => handleProviderLogin('google')}
               disabled={loading}
               className="w-full"
@@ -308,10 +317,10 @@ export function LoginForm() {
             >
               <Mail className="mr-2 h-4 w-4" />
               Sign in with Google
-            </Button>
+            </Button> */}
           </div>
-
-          <div className="relative">
+          
+          {/* <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -359,12 +368,7 @@ export function LoginForm() {
             >
               Don't have an account? Sign up
             </Button>
-          </div>
-
-          <div className="text-center text-sm text-gray-600">
-            <p>Demo credentials:</p>
-            <p>Email: admin@company.com | Password: admin123</p>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

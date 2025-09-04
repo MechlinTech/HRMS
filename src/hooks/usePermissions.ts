@@ -41,9 +41,17 @@ export function usePermissions() {
     // Get role-based dashboards (primary source of truth)
     const roleDashboards = ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || [];
     
-    // For regular employees, only allow role-based dashboards (no extra permissions)
+    // For regular employees, use role-based dashboards + extra permissions
     if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
-      const finalDashboards = roleDashboards.length > 0 ? roleDashboards : [DASHBOARDS.SELF];
+      const roleDashboards = ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || [];
+      const baseDashboards = roleDashboards.length > 0 ? roleDashboards : [DASHBOARDS.SELF];
+      
+      // Add explicit dashboard permissions for employees
+      const explicitDashboards = Object.keys(user.extra_permissions?.dashboards || {})
+        .filter(dashboardId => user.extra_permissions?.dashboards?.[dashboardId] === true);
+      
+      // Combine role-based and explicit permissions, removing duplicates
+      const finalDashboards = [...new Set([...baseDashboards, ...explicitDashboards])];
       
       const allPages = finalDashboards.flatMap(dashboardId => {
         const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
@@ -112,11 +120,12 @@ export function usePermissions() {
       return true;
     }
 
-    // For employees, only check role-based access
+    // For employees, check both role-based access and extra permissions
     if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
       const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
+      const hasExplicitAccess = user.extra_permissions?.dashboards?.[dashboardId] === true;
       
-      if (!hasRoleAccess) {
+      if (!hasRoleAccess && !hasExplicitAccess) {
         return false;
       }
       

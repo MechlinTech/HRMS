@@ -187,11 +187,11 @@ export function Settings() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-1">
+          <TabsTrigger value="profile">Profile</TabsTrigger> 
+          {/* <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6">
@@ -347,7 +347,7 @@ export function Settings() {
             </div>
 
             <div className="space-y-6">
-              <Card>
+              {/* <Card>
                 <CardHeader>
                   <CardTitle>Profile Picture</CardTitle>
                 </CardHeader>
@@ -358,7 +358,7 @@ export function Settings() {
                       {user?.full_name?.charAt(0) || 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <Button size="sm" variant="outline">
+                  {/* <Button size="sm" variant="outline">
                     <Camera className="h-4 w-4 mr-2" />
                     Change Photo
                   </Button>
@@ -366,7 +366,7 @@ export function Settings() {
                     JPG, PNG or GIF. Max size 2MB.
                   </p>
                 </CardContent>
-              </Card>
+              </Card> */}
 
               <Card>
                 <CardHeader>

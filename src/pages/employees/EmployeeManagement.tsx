@@ -74,7 +74,12 @@ const employeeSchema = z.object({
   address: z.string().optional(),
   permanent_address: z.string().optional(),
   date_of_birth: z.string().optional(),
-  date_of_joining: z.string().optional(),
+  date_of_joining: z
+    .string()
+    .min(1, 'Date of joining is required')
+    .refine((val) => !isNaN(Date.parse(val)), {
+      message: 'Invalid date format',
+    }),
   role_id: z.string().optional(),
   department_id: z.string().optional(),
   manager_id: z.string().optional(),
@@ -115,49 +120,6 @@ export function EmployeeManagement() {
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('basic');
   const [viewActiveTab, setViewActiveTab] = useState('basic');
-  
-  // Internal fields state
-  const [internalPeople, setInternalPeople] = useState('none');
-  const [internalPayroll, setInternalPayroll] = useState('none');
-  const [isUpdatingInternal, setIsUpdatingInternal] = useState(false);
-  const [isEditingInternal, setIsEditingInternal] = useState(false);
-  const [peopleSearchTerm, setPeopleSearchTerm] = useState('');
-  const [payrollSearchTerm, setPayrollSearchTerm] = useState('');
-  const [isPeoplePopoverOpen, setIsPeoplePopoverOpen] = useState(false);
-  const [isPayrollPopoverOpen, setIsPayrollPopoverOpen] = useState(false);
-
-  const handleUpdateInternalFields = async () => {
-    if (!userOptions || userOptions.length === 0) return;
-    
-    setIsUpdatingInternal(true);
-    
-    try {
-      // Update ALL users (active, inactive, new) with the same internal values
-      const { error } = await supabase
-        .from('users')
-        .update({
-            internal_people: internalPeople === 'none' ? null : internalPeople,
-            internal_payroll: internalPayroll === 'none' ? null : internalPayroll,
-        })
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all users except dummy records
-      
-      if (error) throw error;
-      
-      toast.success(`Internal fields updated for all ${userOptions.length} users!`);
-      setIsUpdatingInternal(false);
-      // Exit edit mode and reset search states
-      setIsEditingInternal(false);
-      setPeopleSearchTerm('');
-      setPayrollSearchTerm('');
-      setIsPeoplePopoverOpen(false);
-      setIsPayrollPopoverOpen(false);
-    } catch (error) {
-      toast.error('Failed to update internal fields');
-      console.error('Internal fields update error:', error);
-    } finally {
-      setIsUpdatingInternal(false);
-    }
-  };
 
   // Get departments, roles, and users for dropdowns
   const { data: departmentOptions } = useQuery({
@@ -189,22 +151,12 @@ export function EmployeeManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('users')
-        .select('id, full_name, email, internal_people, internal_payroll')
+        .select('id, full_name, email')
         .order('full_name');
       if (error) throw error;
       return data;
     },
   });
-
-  // Initialize internal fields when user data loads
-  React.useEffect(() => {
-    if (userOptions && userOptions.length > 0) {
-      // Find the first user with internal values or default to 'none'
-      const userWithInternalData = userOptions.find(user => user.internal_people || user.internal_payroll);
-      setInternalPeople(userWithInternalData?.internal_people || 'none');
-      setInternalPayroll(userWithInternalData?.internal_payroll || 'none');
-    }
-  }, [userOptions]);
 
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -269,9 +221,6 @@ export function EmployeeManagement() {
     return user ? { name: user.full_name, email: user.email } : null;
   };
 
-  const selectedPeopleUser = getSelectedUserDisplay(internalPeople);
-  const selectedPayrollUser = getSelectedUserDisplay(internalPayroll);
-
   // Filter users based on search terms
   const getFilteredUsers = (searchTerm: string) => {
     if (!userOptions) return [];
@@ -282,9 +231,6 @@ export function EmployeeManagement() {
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
-
-  const filteredPeopleUsers = getFilteredUsers(peopleSearchTerm);
-  const filteredPayrollUsers = getFilteredUsers(payrollSearchTerm);
 
   const handleEditEmployee = (employee: any) => {
     setEditingEmployee(employee);
@@ -417,7 +363,7 @@ export function EmployeeManagement() {
       <Tabs defaultValue="employees" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="employees">All Employees</TabsTrigger>
-          <TabsTrigger value="assets">Asset Management</TabsTrigger>
+          {/* <TabsTrigger value="assets">Asset Management</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="employees" className="space-y-6">
@@ -478,264 +424,6 @@ export function EmployeeManagement() {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Internal Fields Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserCheck className="h-5 w-5" />
-                Internal Fields Management
-              </CardTitle>
-              <CardDescription>
-                Set common internal values for all employees
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!isEditingInternal ? (
-                /* View Mode */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Internal People</Label>
-                      <div className="p-3 bg-gray-50 rounded-lg border">
-                        {selectedPeopleUser ? (
-                          <div>
-                            <p className="font-medium">{selectedPeopleUser.name}</p>
-                            <p className="text-xs text-muted-foreground">{selectedPeopleUser.email}</p>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground">None selected</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Internal Payroll</Label>
-                      <div className="p-3 bg-gray-50 rounded-lg border">
-                        {selectedPayrollUser ? (
-                          <div>
-                            <p className="font-medium">{selectedPayrollUser.name}</p>
-                            <p className="text-xs text-muted-foreground">{selectedPayrollUser.email}</p>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground">None selected</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <Button 
-                    onClick={() => setIsEditingInternal(true)}
-                    variant="outline"
-                    className="w-full md:w-auto"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit Internal Fields
-                  </Button>
-                </div>
-              ) : (
-                /* Edit Mode */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="internal-people" className="text-sm font-medium">
-                        Internal People
-                      </Label>
-                      <Popover open={isPeoplePopoverOpen} onOpenChange={setIsPeoplePopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isPeoplePopoverOpen}
-                            className="w-full justify-between"
-                          >
-                            {selectedPeopleUser ? (
-                              <div className="flex flex-col text-left">
-                                <span>{selectedPeopleUser.name}</span>
-                                <span className="text-xs text-muted-foreground">{selectedPeopleUser.email}</span>
-                              </div>
-                            ) : (
-                              "Select internal people user"
-                            )}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                          <Command>
-                            <CommandInput 
-                              placeholder="Search users by name or email..."
-                              value={peopleSearchTerm}
-                              onValueChange={setPeopleSearchTerm}
-                            />
-                            <CommandList>
-                              <CommandEmpty>No users found.</CommandEmpty>
-                              <CommandGroup>
-                                <CommandItem
-                                  value="none"
-                                  onSelect={() => {
-                                    setInternalPeople('none');
-                                    setIsPeoplePopoverOpen(false);
-                                    setPeopleSearchTerm('');
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      internalPeople === 'none' ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  None
-                                </CommandItem>
-                          {filteredPeopleUsers?.map((user) => (
-                                  <CommandItem
-                                    key={user.id}
-                                    value={`${user.full_name} ${user.email}`}
-                                    onSelect={() => {
-                                      setInternalPeople(user.id);
-                                      setIsPeoplePopoverOpen(false);
-                                      setPeopleSearchTerm('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        internalPeople === user.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                              <div className="flex flex-col">
-                                <span>{user.full_name}</span>
-                                <span className="text-xs text-muted-foreground">{user.email}</span>
-                              </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="internal-payroll" className="text-sm font-medium">
-                        Internal Payroll
-                      </Label>
-                      <Popover open={isPayrollPopoverOpen} onOpenChange={setIsPayrollPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isPayrollPopoverOpen}
-                            className="w-full justify-between"
-                          >
-                            {selectedPayrollUser ? (
-                              <div className="flex flex-col text-left">
-                                <span>{selectedPayrollUser.name}</span>
-                                <span className="text-xs text-muted-foreground">{selectedPayrollUser.email}</span>
-                              </div>
-                            ) : (
-                              "Select internal payroll user"
-                            )}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                          <Command>
-                            <CommandInput 
-                              placeholder="Search users by name or email..."
-                              value={payrollSearchTerm}
-                              onValueChange={setPayrollSearchTerm}
-                            />
-                            <CommandList>
-                              <CommandEmpty>No users found.</CommandEmpty>
-                              <CommandGroup>
-                                <CommandItem
-                                  value="none"
-                                  onSelect={() => {
-                                    setInternalPayroll('none');
-                                    setIsPayrollPopoverOpen(false);
-                                    setPayrollSearchTerm('');
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      internalPayroll === 'none' ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  None
-                                </CommandItem>
-                          {filteredPayrollUsers?.map((user) => (
-                                  <CommandItem
-                                    key={user.id}
-                                    value={`${user.full_name} ${user.email}`}
-                                    onSelect={() => {
-                                      setInternalPayroll(user.id);
-                                      setIsPayrollPopoverOpen(false);
-                                      setPayrollSearchTerm('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        internalPayroll === user.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                              <div className="flex flex-col">
-                                <span>{user.full_name}</span>
-                                <span className="text-xs text-muted-foreground">{user.email}</span>
-                              </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2 pt-2">
-                    <Button 
-                      onClick={handleUpdateInternalFields}
-                      disabled={isUpdatingInternal || !userOptions || userOptions.length === 0}
-                      className="flex-1 md:flex-none"
-                    >
-                      {isUpdatingInternal ? (
-                        <>
-                          <LoadingSpinner size="sm" className="mr-2" />
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditingInternal(false);
-                        setPeopleSearchTerm('');
-                        setPayrollSearchTerm('');
-                        setIsPeoplePopoverOpen(false);
-                        setIsPayrollPopoverOpen(false);
-                        // Reset to original values from user data
-                        if (userOptions && userOptions.length > 0) {
-                          // Find the first user with internal values or default to 'none'
-                          const userWithInternalData = userOptions.find(user => user.internal_people || user.internal_payroll);
-                          setInternalPeople(userWithInternalData?.internal_people || 'none');
-                          setInternalPayroll(userWithInternalData?.internal_payroll || 'none');
-                        }
-                      }}
-                      disabled={isUpdatingInternal}
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -1346,7 +1034,7 @@ export function EmployeeManagement() {
                           name="date_of_joining"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-sm font-medium text-gray-700">Date of Joining</FormLabel>
+                              <FormLabel className="text-sm font-medium text-gray-700">Date of Joining *</FormLabel>
                               <FormControl>
                                 <Input type="date" {...field} className="mt-1" />
                               </FormControl>

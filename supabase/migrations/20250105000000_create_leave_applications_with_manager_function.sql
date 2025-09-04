@@ -226,8 +226,6 @@ RETURNS TABLE (
   ifsc_code text,
   qualification text,
   employment_terms text,
-  internal_people uuid,
-  internal_payroll uuid,
   
   -- Role details
   role_name text,
@@ -293,8 +291,6 @@ BEGIN
     u.ifsc_code,
     u.qualification,
     u.employment_terms,
-    u.internal_people,
-    u.internal_payroll,
     
     -- Role details
     r.name as role_name,
@@ -366,8 +362,6 @@ RETURNS TABLE (
   ifsc_code text,
   qualification text,
   employment_terms text,
-  internal_people uuid,
-  internal_payroll uuid,
   
   -- Role details
   role_name text,
@@ -433,8 +427,6 @@ BEGIN
     u.ifsc_code,
     u.qualification,
     u.employment_terms,
-    u.internal_people,
-    u.internal_payroll,
     
     -- Role details
     r.name as role_name,

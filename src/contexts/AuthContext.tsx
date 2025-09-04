@@ -37,14 +37,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Inactivity timeout hook
   const { isWarning, remainingTime, extendSession } = useInactivityTimeout({
-    timeout: TIMEOUT_DURATION,
-    warningTime: WARNING_DURATION,
-    onTimeout: () => logout(true),
-    onWarning: () => {
-      console.log('Session timeout warning displayed');
-    },
-    enabled: !!user && !loading
-  });
+  timeout: TIMEOUT_DURATION,
+  warningTime: WARNING_DURATION,
+  onTimeout: () => {
+    console.log("🚪 Logging out due to inactivity");
+    logout(true);
+  },
+  enabled: !!user && !loading,
+});
 
   useEffect(() => {
     // Check for existing session

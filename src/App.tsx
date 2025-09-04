@@ -113,12 +113,12 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ReferSomeone />
           </Suspense>
-        } />
+        } /> */}
         <Route path="dashboard/settings" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Settings />
           </Suspense>
-        } /> */}
+        } />
         <Route path="employees" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <EmployeeManagement />
@@ -159,7 +159,7 @@ function AppRoutes() {
             <ProjectManagement />
           </Suspense>
         } /> */}
-        {/* <Route path="grievance" element={
+        <Route path="grievance" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <GrievanceDashboard />
           </Suspense>
@@ -273,13 +273,13 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <AllCandidates />
           </Suspense>
-        } /> */}
+        } />
         <Route path="notifications" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <NotificationsPage />
           </Suspense>
         } />
-        {/* <Route path="exit" element={
+        <Route path="exit" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ExitDashboard />
           </Suspense>
@@ -303,7 +303,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ExitInterview />
           </Suspense>
-        } /> */}
+        } />
         <Route path="" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

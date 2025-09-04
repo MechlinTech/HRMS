@@ -303,7 +303,7 @@ export function LeaveApplication() {
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                         placeholder="Please provide a reason for your leave request..."
-                        className="mt-1"
+                        className="mt-2"
                         rows={4}
                       />
                     </div>
@@ -311,7 +311,7 @@ export function LeaveApplication() {
                     <Button 
                       type="submit" 
                       className="w-full"
-                      disabled={!selectedType || !startDate || !endDate || !reason.trim() || createLeaveApplication.isPending}
+                      disabled={!selectedType || !startDate || !endDate || !reason.trim() || createLeaveApplication.isPending || startDate>endDate}
                     >
                       {createLeaveApplication.isPending ? 'Submitting...' : 'Submit Leave Application'}
                     </Button>
@@ -507,8 +507,8 @@ export function LeaveApplication() {
                               )}
                             </p>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>{leave.leave_type?.name}</span>
-                              <span>•</span>
+                              {/* <span>{leave.leave_type?.name}</span>
+                              <span>•</span> */}
                               <span>
                                 {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd')}
                               </span>

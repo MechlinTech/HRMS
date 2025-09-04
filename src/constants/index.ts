@@ -43,7 +43,7 @@ export const DASHBOARD_CONFIG = [
       // { id: 'complaints', name: 'Complaints', slug: 'complaints', path: '/dashboard/complaints', icon: 'MessageSquare' },
       // { id: 'performance', name: 'Performance', slug: 'performance', path: '/dashboard/performance', icon: 'Target' },
       // { id: 'referrals', name: 'Refer Someone', slug: 'referrals', path: '/dashboard/referrals', icon: 'UserPlus' },
-      // { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
+      { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
     ],
   },
   {

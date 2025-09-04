@@ -21,13 +21,13 @@ export function DashboardSwitcher() {
     // Use exact path matching to avoid conflicts
     if (path === '/dashboard' || path.startsWith('/dashboard/')) return dashboards.find(d => d.id === 'self');
     if (path === '/employees' || path.startsWith('/employees/')) return dashboards.find(d => d.id === 'employee_management');
-    if (path === '/performance' || path.startsWith('/performance/')) return dashboards.find(d => d.id === 'performance');
-    if (path === '/grievance' || path.startsWith('/grievance/')) return dashboards.find(d => d.id === 'grievance');
-    if (path === '/bd' || path.startsWith('/bd/')) return dashboards.find(d => d.id === 'bd_team');
-    if (path === '/finance' || path.startsWith('/finance/')) return dashboards.find(d => d.id === 'finance');
-    if (path === '/ats' || path.startsWith('/ats/')) return dashboards.find(d => d.id === 'ats');
-    if (path === '/lms' || path.startsWith('/lms/')) return dashboards.find(d => d.id === 'lms');
-    if (path === '/exit' || path.startsWith('/exit/')) return dashboards.find(d => d.id === 'exit');
+    // if (path === '/performance' || path.startsWith('/performance/')) return dashboards.find(d => d.id === 'performance');
+    // if (path === '/grievance' || path.startsWith('/grievance/')) return dashboards.find(d => d.id === 'grievance');
+    // if (path === '/bd' || path.startsWith('/bd/')) return dashboards.find(d => d.id === 'bd_team');
+    // if (path === '/finance' || path.startsWith('/finance/')) return dashboards.find(d => d.id === 'finance');
+    // if (path === '/ats' || path.startsWith('/ats/')) return dashboards.find(d => d.id === 'ats');
+    // if (path === '/lms' || path.startsWith('/lms/')) return dashboards.find(d => d.id === 'lms');
+    // if (path === '/exit' || path.startsWith('/exit/')) return dashboards.find(d => d.id === 'exit'); 
     return dashboards[0];
   };
 

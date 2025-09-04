@@ -219,6 +219,7 @@ function LeaveApplicationActions({ application }: { application: any }) {
                     value={comments}
                     onChange={(e) => setComments(e.target.value)}
                     rows={3}
+                    className="mt-2"
                   />
                 </div>
               </div>

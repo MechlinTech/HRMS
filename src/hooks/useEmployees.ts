@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeApi, assetApi, hrReferralsApi, hrExitApi } from '@/services/api';
 import { authApi } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export function useAllEmployees() {
@@ -36,13 +37,46 @@ export function useAllEmployeesAttendance(year?: number, month?: number) {
 
 export function useUpdateUserPermissions() {
   const queryClient = useQueryClient();
+  const { user, updateUser } = useAuth();
   
   return useMutation({
     mutationFn: ({ userId, updates }: { userId: string; updates: any }) =>
       authApi.updateProfile(userId, updates),
-    onSuccess: () => {
+    onSuccess: async (updatedUser, { userId, updates }) => {
       queryClient.invalidateQueries({ queryKey: ['all-employees'] });
-      toast.success('Dashboard access updated successfully!');
+      
+      // If the current user's permissions are being updated, update their session
+      if (user && user.id === userId) {
+        try {
+          // Update the current user's session using the AuthContext
+          await updateUser(updates);
+          
+          // For permission changes, we need a page refresh to ensure all components 
+          // re-evaluate permissions and update the dashboard switcher
+          if (updates.extra_permissions) {
+            toast.success('Dashboard access updated successfully! Refreshing page to apply changes...');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            toast.success('Profile updated successfully!');
+          }
+        } catch (error) {
+          console.error('Failed to update current user session:', error);
+          if (updates.extra_permissions) {
+            toast.success('Dashboard access updated successfully! Please refresh the page to see changes.');
+          } else {
+            toast.success('Profile updated successfully! Please refresh the page to see changes.');
+          }
+        }
+      } else {
+        // When updating another user's permissions
+        if (updates.extra_permissions) {
+          toast.success('Dashboard access updated successfully!');
+        } else {
+          toast.success('Employee updated successfully!');
+        }
+      }
     },
     onError: (error) => {
       toast.error('Failed to update dashboard access');

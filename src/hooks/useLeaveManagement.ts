@@ -5,23 +5,19 @@ import { toast } from 'sonner';
 
 // Helper function to check leave application permissions
 export async function checkLeaveApplicationPermissions(userId: string, applicationUserId: string) {
-  // Get current user's data to check internal roles and admin status
+  // Get current user's data to check role and manager status
   const { data: currentUser, error: userError } = await supabase
     .from('users')
-    .select('id, internal_people, internal_payroll, role:roles(name)')
+    .select('id, role:roles(name)')
     .eq('id', userId)
     .single();
   
   if (userError) throw userError;
   
-  // Check if current user is admin/super_admin
+  // Check if current user is admin/super_admin/hr
   const userRole = currentUser.role?.name || '';
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
-  
-  // Check if current user has internal roles (internal_people and internal_payroll are UUID fields)
-  // Users whose ID matches the internal_people or internal_payroll UUID have special privileges
-  const isInternalPeople = currentUser.internal_people === userId;
-  const isInternalPayroll = currentUser.internal_payroll === userId;
+  const isHR = userRole === 'hr';
   
   // Get the application user's manager info
   const { data: applicationUser, error: appUserError } = await supabase
@@ -40,28 +36,25 @@ export async function checkLeaveApplicationPermissions(userId: string, applicati
     applicationUserId,
     userRole,
     isAdmin,
-    currentUser_internal_people: currentUser.internal_people,
-    currentUser_internal_payroll: currentUser.internal_payroll,
-    isInternalPeople, 
-    isInternalPayroll, 
+    isHR,
     isManager,
     managerIdFromApp: applicationUser.manager_id 
   });
   
-  // NEW RULES:
+  // NEW RULES: Only manager, HR, and admin roles can approve/reject/edit leave applications
   // 1. ADMIN/SUPER_ADMIN have ALL permissions (highest priority)
   if (isAdmin) {
     return { canView: true, canEdit: true, reason: 'admin' };
   }
   
-  // 2. internal_people and managers can EDIT
-  if (isInternalPeople || isManager) {
-    return { canView: true, canEdit: true, reason: isInternalPeople ? 'internal_people' : 'manager' };
+  // 2. HR can EDIT all applications
+  if (isHR) {
+    return { canView: true, canEdit: true, reason: 'hr' };
   }
   
-  // 3. internal_payroll can VIEW only (cannot edit)
-  if (isInternalPayroll) {
-    return { canView: true, canEdit: false, reason: 'internal_payroll' };
+  // 3. Managers can EDIT applications of their direct reports
+  if (isManager) {
+    return { canView: true, canEdit: true, reason: 'manager' };
   }
   
   // No access for other users
@@ -80,35 +73,29 @@ export function useAllLeaveApplications() {
       console.log('useAllLeaveApplications queryFn executing...');
       if (!user) throw new Error('User not authenticated');
       
-      // Get current user's data to check internal roles and admin status
+      // Get current user's data to check role and manager status
       const { data: currentUser, error: userError } = await supabase
         .from('users')
-        .select('id, internal_people, internal_payroll, role:roles(name)')
+        .select('id, role:roles(name)')
         .eq('id', user.id)
         .single();
       
       if (userError) throw userError;
       
-      // Check if current user is admin/super_admin
+      // Check if current user is admin/super_admin/hr
       const userRole = currentUser.role?.name || '';
       const isAdmin = userRole === 'admin' || userRole === 'super_admin';
-      
-      // Check if current user has internal roles (internal_people and internal_payroll are UUID fields)
-      const isInternalPeople = currentUser.internal_people === user.id;
-      const isInternalPayroll = currentUser.internal_payroll === user.id;
+      const isHR = userRole === 'hr';
       
       console.log('View permissions:', { 
         userId: user.id, 
         userRole,
         isAdmin,
-        currentUser_internal_people: currentUser.internal_people,
-        currentUser_internal_payroll: currentUser.internal_payroll,
-        isInternalPeople, 
-        isInternalPayroll
+        isHR
       });
       
-      // NEW RULES: admin, internal_people and internal_payroll can view ALL applications
-      if (isAdmin || isInternalPeople || isInternalPayroll) {
+      // Admin and HR can view ALL applications
+      if (isAdmin || isHR) {
         const { data, error } = await supabase
           .rpc('get_leave_applications_with_manager_details');
         
@@ -154,8 +141,7 @@ export function useAllLeaveApplications() {
         })) || [];
       }
       
-      // If user is a manager, they can only view applications of their direct reports
-      // First get all user IDs that report to this manager
+      // Check if user is a manager - they can only view applications of their direct reports
       const { data: directReports, error: reportsError } = await supabase
         .from('users')
         .select('id')
@@ -165,54 +151,55 @@ export function useAllLeaveApplications() {
       
       const directReportIds = directReports?.map(report => report.id) || [];
       
-      // If no direct reports, return empty array
-      if (directReportIds.length === 0) {
-        return [];
+      // If user has direct reports, they can view their applications
+      if (directReportIds.length > 0) {
+        const { data, error } = await supabase
+          .rpc('get_leave_applications_for_manager', { manager_user_id: user.id });
+        
+        if (error) throw error;
+        
+        // Transform the data to match the expected structure
+        return data?.map((row: any) => ({
+          id: row.id,
+          user_id: row.user_id,
+          leave_type_id: row.leave_type_id,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          days_count: row.days_count,
+          reason: row.reason,
+          status: row.status,
+          applied_at: row.applied_at,
+          approved_by: row.approved_by,
+          approved_at: row.approved_at,
+          comments: row.comments,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          user: {
+            id: row.user_id,
+            full_name: row.user_full_name,
+            employee_id: row.user_employee_id,
+            email: row.user_email,
+            manager_id: row.user_manager_id,
+            manager: row.manager_id ? {
+              id: row.manager_id,
+              full_name: row.manager_full_name,
+              email: row.manager_email
+            } : null
+          },
+          leave_type: {
+            name: row.leave_type_name,
+            description: row.leave_type_description
+          },
+          approved_by_user: row.approved_by_full_name ? {
+            id: row.approved_by,
+            full_name: row.approved_by_full_name,
+            email: row.approved_by_email
+          } : null
+        })) || [];
       }
       
-      const { data, error } = await supabase
-        .rpc('get_leave_applications_for_manager', { manager_user_id: user.id });
-      
-      if (error) throw error;
-      
-      // Transform the data to match the expected structure
-      return data?.map((row: any) => ({
-        id: row.id,
-        user_id: row.user_id,
-        leave_type_id: row.leave_type_id,
-        start_date: row.start_date,
-        end_date: row.end_date,
-        days_count: row.days_count,
-        reason: row.reason,
-        status: row.status,
-        applied_at: row.applied_at,
-        approved_by: row.approved_by,
-        approved_at: row.approved_at,
-        comments: row.comments,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        user: {
-          id: row.user_id,
-          full_name: row.user_full_name,
-          employee_id: row.user_employee_id,
-          email: row.user_email,
-          manager_id: row.user_manager_id,
-          manager: row.manager_id ? {
-            id: row.manager_id,
-            full_name: row.manager_full_name,
-            email: row.manager_email
-          } : null
-        },
-        leave_type: {
-          name: row.leave_type_name,
-          description: row.leave_type_description
-        },
-        approved_by_user: row.approved_by_full_name ? {
-          id: row.approved_by,
-          full_name: row.approved_by_full_name,
-          email: row.approved_by_email
-        } : null
-      })) || [];
+      // If user doesn't have permission (not admin, HR, or manager), return empty array
+      return [];
     },
     enabled: !!user,
   });

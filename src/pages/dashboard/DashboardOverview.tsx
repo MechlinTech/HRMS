@@ -490,7 +490,7 @@ export function DashboardOverview() {
                     value={projectDescription}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setProjectDescription(e.target.value)}
                     placeholder="E.g., Implemented feature X, fixed bug Y, meetings, etc."
-                    className="mt-1 bg-white/70 backdrop-blur-sm border-orange-200/50"
+                    className="mt-2 bg-white/70 backdrop-blur-sm border-orange-200/50 "
                     rows={3}
                   />
                 </div>

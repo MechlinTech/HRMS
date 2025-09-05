@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leaveApi } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { supabase } from '@/services/supabase';
+import { getCurrentISTTimestamp, isPastDate } from '@/utils/dateUtils';
 
 export function useLeaveTypes() {
   return useQuery({
@@ -51,6 +53,105 @@ export function useCreateLeaveApplication() {
   });
 }
 
+export function useWithdrawLeaveApplication() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      applicationId, 
+      reason 
+    }: { 
+      applicationId: string; 
+      reason: string; 
+    }) => {
+      if (!user) throw new Error('User not authenticated');
+      
+      // First, get the leave application to check ownership and current status
+      const { data: application, error: appError } = await supabase
+        .from('leave_applications')
+        .select('*')
+        .eq('id', applicationId)
+        .single();
+      
+      if (appError) throw appError;
+      
+      // Check if user owns this application or has admin privileges
+      const { data: currentUser, error: userError } = await supabase
+        .from('users')
+        .select('id, role:roles(name)')
+        .eq('id', user.id)
+        .single();
+      
+      if (userError) throw userError;
+      
+      const userRole = currentUser.role?.name || '';
+      const isAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'hr';
+      const isOwner = application.user_id === user.id;
+      
+      if (!isOwner && !isAdmin) {
+        throw new Error('You can only withdraw your own leave applications');
+      }
+      
+      // Check if application can be withdrawn (pending or approved)
+      if (!['pending', 'approved'].includes(application.status)) {
+        throw new Error('Only pending or approved leave applications can be withdrawn');
+      }
+      
+      // Check if the leave is in the past (cannot withdraw past leaves)
+      // Check if the leave start date is in the future (using IST)
+      if (isPastDate(application.start_date)) {
+        throw new Error('Cannot withdraw leave applications that have already started or are in the past');
+      }
+      
+      // Update the leave application status to 'withdrawn'
+      const { error: updateError } = await supabase
+        .from('leave_applications')
+        .update({
+          status: 'withdrawn',
+          withdrawn_at: getCurrentISTTimestamp(),
+          withdrawn_by: user.id,
+          withdrawal_reason: reason,
+          updated_at: getCurrentISTTimestamp()
+        })
+        .eq('id', applicationId);
+      
+      if (updateError) throw updateError;
+      
+      // Create a withdrawal log entry
+      const { error: logError } = await supabase
+        .from('leave_withdrawal_logs')
+        .insert({
+          leave_application_id: applicationId,
+          withdrawn_by: user.id,
+          withdrawal_reason: reason,
+          previous_status: application.status,
+          withdrawn_at: getCurrentISTTimestamp()
+        });
+      
+      if (logError) {
+        console.warn('Failed to create withdrawal log:', logError);
+        // Don't throw error here as the main operation succeeded
+      }
+      
+      return { applicationId, previousStatus: application.status };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['leave-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-on-leave'] });
+      queryClient.invalidateQueries({ queryKey: ['user-leave-summary'] });
+      
+      toast.success('Leave application withdrawn successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to withdraw leave application');
+      console.error('Leave withdrawal error:', error);
+    },
+  });
+}
+
 export function useEmployeesOnLeave(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ['employees-on-leave', startDate, endDate],
@@ -87,19 +188,37 @@ export function useRecalculateUserBalance() {
   });
 }
 
-export function useTriggerLeaveMaintenence() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: leaveApi.triggerLeaveMaintenence,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['user-leave-summary'] });
-      toast.success('Leave maintenance completed successfully!');
+export function useLeaveWithdrawalLogs(applicationId?: string) {
+  return useQuery({
+    queryKey: ['leave-withdrawal-logs', applicationId],
+    queryFn: async () => {
+      const query = supabase
+        .from('leave_withdrawal_logs')
+        .select(`
+          *,
+          leave_application:leave_applications!leave_application_id(
+            id,
+            start_date,
+            end_date,
+            days_count,
+            leave_type:leave_types!leave_type_id(name)
+          ),
+          withdrawn_by_user:users!withdrawn_by(full_name, email)
+        `)
+        .order('withdrawn_at', { ascending: false });
+      
+      if (applicationId) {
+        query.eq('leave_application_id', applicationId);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      return data;
     },
-    onError: (error) => {
-      toast.error('Failed to run leave maintenance');
-      console.error('Leave maintenance error:', error);
-    },
+    enabled: true,
   });
 }
+
+// Automatic leave maintenance has been removed
+// HR now manages leave allocations manually once a year

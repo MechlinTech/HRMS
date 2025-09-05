@@ -126,21 +126,5 @@ export function useRecalculateSpecificUserBalance() {
   });
 }
 
-// Hook to trigger system-wide leave maintenance
-export function useSystemLeaveMaintenence() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: leaveApi.triggerLeaveMaintenence,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances'] });
-      queryClient.invalidateQueries({ queryKey: ['leave-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['user-leave-summary'] });
-      toast.success('System leave maintenance completed successfully!');
-    },
-    onError: (error) => {
-      toast.error('Failed to run system leave maintenance');
-      console.error('System leave maintenance error:', error);
-    },
-  });
-}
+// Automatic system-wide leave maintenance has been removed
+// HR now manages leave allocations manually once a year

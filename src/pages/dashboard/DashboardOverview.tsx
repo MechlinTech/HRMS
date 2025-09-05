@@ -36,6 +36,7 @@ import { format } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from 'sonner';
 import {supabase} from '@/services/supabase'
+import { getTodayIST } from '@/utils/dateUtils';
 
 export function DashboardOverview() {
   const { user } = useAuth();
@@ -158,7 +159,6 @@ export function DashboardOverview() {
       description: 'Annual leave remaining',
       icon: Calendar,
       color: 'bg-gray-500',
-      trend: '+2 from last month',
     },
     {
       title: 'Today\'s Hours',
@@ -166,7 +166,6 @@ export function DashboardOverview() {
       description: 'Total work time today',
       icon: Clock,
       color: 'bg-gray-500',
-      trend: secondTimeData ? `${todayTime.toFixed(1)}h calculated` : 'Loading...',
     },
     {
       title: 'Today\'s Sessions',
@@ -174,7 +173,6 @@ export function DashboardOverview() {
       description: 'Time entries today',
       icon: Target,
       color: 'bg-gray-500',
-      trend: secondTimeData ? `${todayTime.toFixed(1)}h total` : 'Loading...',
     },
     {
       title: 'Daily Target',
@@ -182,7 +180,6 @@ export function DashboardOverview() {
       description: '8h daily goal',
       icon: Users,
       color: 'bg-gray-500',
-      trend: secondTimeData ? `${todayTime.toFixed(1)}h / 8h` : 'Loading...',
     },
   ];
 
@@ -216,7 +213,7 @@ export function DashboardOverview() {
           timeTrackingApi.createTimeEntry({
             user_id: user.id,
             project_id: projectId,
-            entry_date: new Date().toISOString().split('T')[0],
+            entry_date: getTodayIST(),
             hours_worked: hours,
             description: projectDescription,
             task_type: 'development',
@@ -247,7 +244,7 @@ export function DashboardOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {user?.full_name?.split(' ')[0]}!
+            Welcome {user?.full_name?.split(' ')[0]}!
           </h1>
           <p className="text-muted-foreground">
             {format(new Date(), 'EEEE, MMMM do, yyyy')}
@@ -291,10 +288,6 @@ export function DashboardOverview() {
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
                 <p className="text-xs text-muted-foreground">{stat.description}</p>
-                <div className="flex items-center pt-1">
-                  <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-                  <span className="text-xs text-green-600">{stat.trend}</span>
-                </div>
               </CardContent>
             </Card>
           );
@@ -649,7 +642,7 @@ export function DashboardOverview() {
           </Card>
 
           {/* Quick Actions */}
-          <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">
+          {/* <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Frequently used features</CardDescription>
@@ -674,7 +667,7 @@ export function DashboardOverview() {
                 </Button>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Today's Performance Overview */}
           <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">

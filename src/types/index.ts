@@ -58,6 +58,7 @@ export interface User {
   qualification?: string;
   employment_terms?: 'part_time' | 'full_time';
   tenure_mechlin?: string; // interval type from PostgreSQL
+  isSA?: boolean;
 }
 
 export interface Role {

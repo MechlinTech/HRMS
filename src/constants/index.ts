@@ -13,7 +13,7 @@ export const DASHBOARDS = {
 
 // Role Constants
 export const ROLES = {
-  SUPER_ADMIN: 'super_admin',
+  // SUPER_ADMIN: 'super_admin',
   ADMIN: 'admin',
   HR: 'hr',
   HRM: 'hrm',
@@ -26,6 +26,26 @@ export const ROLES = {
   FINANCE: 'finance',
   FINANCE_MANAGER: 'finance_manager',
 } as const;
+
+// Role Name Maps
+export const roleNameMap = {
+  // super_admin: "Super Admin",
+  admin: "Admin",
+  hr: "HR",
+  hrm: "HR Manager",
+  sdm: "SD Manager",
+  bdm: "BD Manager",
+  qam: "QA Manager",
+  employee: "Employee",
+  ex_employee: "Ex-Employee",
+  candidate: "Candidate",
+  finance: "Finance",
+  finance_manager: "Finance Manager",
+} as const;
+
+export const getRoleDisplayName = (role: string) => {
+  return roleNameMap[role];
+};
 
 // Dashboard Configuration
 export const DASHBOARD_CONFIG = [
@@ -163,7 +183,7 @@ export const DASHBOARD_CONFIG = [
 
 // Role to Dashboard Mapping
 export const ROLE_DASHBOARD_MAPPING = {
-  [ROLES.SUPER_ADMIN]: Object.values(DASHBOARDS),
+  // [ROLES.SUPER_ADMIN]: Object.values(DASHBOARDS),
   [ROLES.ADMIN]: Object.values(DASHBOARDS),
   [ROLES.HR]: [
     DASHBOARDS.SELF,
@@ -272,6 +292,7 @@ export const NOTIFICATION_TYPES = {
   LEAVE_REQUEST_SUBMITTED: 'leave_request_submitted',
   LEAVE_REQUEST_APPROVED: 'leave_request_approved',
   LEAVE_REQUEST_REJECTED: 'leave_request_rejected',
+  LEAVE_REQUEST_WITHDRAWN: 'leave_request_withdrawn',
   PROJECT_ASSIGNED: 'project_assigned',
   PROJECT_UNASSIGNED: 'project_unassigned',
   PROJECT_ROLE_UPDATED: 'project_role_updated',

@@ -1,71 +1,75 @@
-# Automatic Leave Balance System Implementation
+# Manual Leave Balance System Implementation
 
-This document describes the comprehensive automatic leave balance system that has been implemented according to the specified business rules.
+This document describes the manual leave balance system that is managed by HR once a year.
 
-## Leave Balance Rules Implemented
+## Leave Balance Policy
 
-### Tenure-based Leave Allocation
-- **< 9 months tenure**: 0 leaves per month
-- **9 months to < 1 year**: 1 leave per month (credited at start of each month)
-- **≥ 1 year**: 1.5 leaves per month (credited at start of each month)
+### Manual Allocation by HR
+- **HR manages all leave allocations**: Leave balances are set manually by HR once per year
+- **No automatic calculations**: The system does not automatically calculate or credit leaves based on tenure
+- **Contact HR for adjustments**: Employees must contact HR for any balance adjustments or questions
 
-### Carry-forward Rules
-- **< 2 years tenure**: Leaves don't carry forward to next year, but can accumulate within the year until anniversary date
-- **≥ 2 years tenure**: Leaves can be carried forward to the next year
+### Leave Application Rules
+- **Applications always allowed**: Employees can apply for leave regardless of tenure or balance
+- **Approval required**: All leave applications require manager/HR approval
+- **Balance tracking**: System tracks usage when leaves are approved/rejected
 
-### Negative Balance Handling
-- If leave balance goes to 0 and user still takes leave, the system allows it
-- Frontend warns users about salary deduction for excess days
-- The actual salary deduction logic should be implemented in the payroll system
+### Balance Management
+- **Manual allocation only**: HR sets leave allocations manually once a year
+- **Usage tracking**: System automatically tracks used leaves when applications are approved
+- **No automatic resets**: HR handles any balance resets or carry-forwards manually
 
 ## Database Changes
 
-### New Migration Files
-1. **`20250115000000_implement_automatic_leave_balance.sql`**
-   - Adds new columns to `leave_balances` table
-   - Creates functions for tenure calculation and leave rate determination
-   - Implements balance update triggers
-   - Initializes balances for existing users
+### Migration Files
+1. **`20250905000002_remove_automatic_leave_allocation.sql`**
+   - Removes all automatic leave allocation triggers and scheduled jobs
+   - Drops automatic maintenance functions and calculations
+   - Simplifies leave_balances table (removes auto-calculation columns)
+   - Updates system to manual-only allocation approach
 
-2. **`20250115000001_create_leave_scheduler_functions.sql`**
-   - Creates scheduled maintenance functions
-   - Sets up pg_cron for automated monthly processing
-   - Creates helper functions for HR management
+### Remaining Database Functions
 
-### New Database Functions
+#### Essential Functions (Kept)
+- `get_tenure_months(joining_date)` - Calculates tenure in months (for display purposes)
+- `recalculate_user_leave_balance(user_id)` - Returns current balance information (no auto-calculation)
+- `get_user_leave_summary(user_id)` - Comprehensive balance info for display
+- `update_leave_balance_on_status_change()` - Simplified to only track usage, no auto-creation
 
-#### Core Functions
-- `get_tenure_months(joining_date)` - Calculates tenure in months
-- `get_monthly_leave_rate(joining_date)` - Returns leave rate based on tenure
-- `can_carry_forward_leaves(joining_date)` - Checks if carry-forward is allowed
-- `update_user_leave_balance(user_id, year)` - Updates/initializes user balance
+#### Removed Functions
+- All automatic maintenance and scheduling functions
+- Automatic balance calculation and crediting functions
+- pg_cron scheduled jobs and related functions
 
-#### Maintenance Functions
-- `credit_monthly_leaves()` - Credits monthly leaves (runs monthly)
-- `process_anniversary_resets()` - Handles anniversary resets (runs daily)
-- `process_year_end_carry_forward()` - Handles year-end carry-forward (Dec 31)
-- `maintain_leave_balances()` - Main scheduler function
-
-#### Helper Functions
-- `recalculate_user_leave_balance(user_id)` - Manual recalculation
-- `get_user_leave_summary(user_id)` - Comprehensive balance info
-- `manual_leave_maintenance()` - Manual trigger for all maintenance
-
-### New Database View
-- `leave_balance_summary` - HR view for monitoring all user balances
+### HR Management Tools
+- Manual balance adjustment through LeaveManagement interface
+- Create new leave balances for employees
+- View and monitor all employee balances
+- Track balance adjustment history
 
 ## API Changes
 
-### New API Endpoints
+### Updated API Endpoints
 ```typescript
-// Get comprehensive leave summary for a user
+// Get comprehensive leave summary for a user (simplified)
 leaveApi.getUserLeaveSummary(userId: string)
 
-// Manually recalculate user's leave balance
+// Get current balance information (no auto-calculation)
 leaveApi.recalculateUserBalance(userId: string)
 
-// Trigger manual leave maintenance (admin only)
-leaveApi.triggerLeaveMaintenence()
+// Removed: triggerLeaveMaintenence() - automatic maintenance removed
+```
+
+### HR Management API
+```typescript
+// Get all employees' leave balances
+leaveApi.getAllEmployeesLeaveBalances(year?: number)
+
+// Adjust leave balance manually
+leaveApi.adjustLeaveBalance(userId: string, adjustment: object)
+
+// Create new leave balance for employee
+leaveApi.createLeaveBalance(userData: object)
 ```
 
 ## Frontend Changes

@@ -8,15 +8,14 @@ export async function checkLeaveApplicationPermissions(userId: string, applicati
   // Get current user's data to check role and manager status
   const { data: currentUser, error: userError } = await supabase
     .from('users')
-    .select('id, role:roles(name)')
+    .select('id, "isSA", role:roles(name)')
     .eq('id', userId)
     .single();
   
   if (userError) throw userError;
   
-  // Check if current user is admin/super_admin/hr
   const userRole = currentUser.role?.name || '';
-  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+  const isAdmin = currentUser.isSA || userRole === 'admin' || userRole === 'super_admin';
   const isHR = userRole === 'hr';
   
   // Get the application user's manager info

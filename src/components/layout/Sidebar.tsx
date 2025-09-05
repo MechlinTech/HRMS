@@ -7,7 +7,6 @@ import * as Icons from 'lucide-react';
 
 export function Sidebar() {
   const { user } = useAuth();
-  console.log(user);
   const { getAccessibleDashboards } = usePermissions();
 
   const dashboards = getAccessibleDashboards();

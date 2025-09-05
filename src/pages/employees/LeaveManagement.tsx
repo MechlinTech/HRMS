@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAllLeaveApplications, useUpdateLeaveApplicationStatus, useLeaveApplicationPermissions } from '@/hooks/useLeaveManagement';
+import { useWithdrawLeaveApplication } from '@/hooks/useLeave';
 import { useAllEmployeesLeaveBalances, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
+import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,11 +35,13 @@ import {
   TrendingUp,
   Calculator,
   History,
-  Info
+  Info,
+  RotateCcw
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { cn } from '@/lib/utils';
+import { isPastDate } from '@/utils/dateUtils';
 
 // Helper functions
 const getStatusIcon = (status: string) => {
@@ -50,6 +54,8 @@ const getStatusIcon = (status: string) => {
       return <Clock className="h-4 w-4 text-yellow-600" />;
     case 'cancelled':
       return <XCircle className="h-4 w-4 text-gray-600" />;
+    case 'withdrawn':
+      return <RotateCcw className="h-4 w-4 text-gray-600" />;
     default:
       return <AlertTriangle className="h-4 w-4 text-gray-600" />;
   }
@@ -61,6 +67,7 @@ const getStatusBadge = (status: string) => {
     rejected: 'bg-red-100 text-red-800',
     pending: 'bg-yellow-100 text-yellow-800',
     cancelled: 'bg-gray-100 text-gray-800',
+    withdrawn: 'bg-gray-100 text-gray-800',
   };
   return variants[status as keyof typeof variants] || 'bg-gray-100 text-gray-800';
 };
@@ -69,9 +76,12 @@ const getStatusBadge = (status: string) => {
 function LeaveApplicationActions({ application }: { application: any }) {
   const { data: permissions, isLoading: permissionsLoading } = useLeaveApplicationPermissions(application.user?.id);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [comments, setComments] = useState('');
+  const [withdrawalReason, setWithdrawalReason] = useState('');
   const updateLeaveStatus = useUpdateLeaveApplicationStatus();
+  const withdrawLeaveApplication = useWithdrawLeaveApplication();
 
   const handleStatusUpdate = () => {
     if (!newStatus || !application) return;
@@ -87,6 +97,29 @@ function LeaveApplicationActions({ application }: { application: any }) {
         setComments('');
       }
     });
+  };
+
+  const handleWithdrawLeave = () => {
+    if (!withdrawalReason.trim() || !application) return;
+
+    withdrawLeaveApplication.mutate({
+      applicationId: application.id,
+      reason: withdrawalReason.trim()
+    }, {
+      onSuccess: () => {
+        setIsWithdrawDialogOpen(false);
+        setWithdrawalReason('');
+      }
+    });
+  };
+
+  const canWithdrawLeave = () => {
+    if (!['pending', 'approved'].includes(application.status)) {
+      return false;
+    }
+    
+    // Check if the leave is in the future (can only withdraw future leaves) using IST
+    return !isPastDate(application.start_date);
   };
 
   return (
@@ -239,6 +272,111 @@ function LeaveApplicationActions({ application }: { application: any }) {
           </DialogContent>
         </Dialog>
       )}
+      
+      {/* Withdraw button - for admin/HR or specific permissions */}
+      {permissions?.canEdit && canWithdrawLeave() && (
+        <Dialog open={isWithdrawDialogOpen} onOpenChange={setIsWithdrawDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Withdraw
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Withdraw Leave Application</DialogTitle>
+              <DialogDescription>
+                Withdraw {application.user?.full_name}'s leave application
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Employee:</span>
+                    <span className="ml-2">{application.user?.full_name}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Leave Type:</span>
+                    <span className="ml-2">{application.leave_type?.name}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Duration:</span>
+                    <span className="ml-2">{application.days_count} days</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Current Status:</span>
+                    <Badge className={getStatusBadge(application.status)}>
+                      {application.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="font-medium">Start Date:</span>
+                    <span className="ml-2">{format(new Date(application.start_date), 'MMM dd, yyyy')}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">End Date:</span>
+                    <span className="ml-2">{format(new Date(application.end_date), 'MMM dd, yyyy')}</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <span className="font-medium">Original Reason:</span>
+                  <p className="text-sm text-muted-foreground mt-1">{application.reason}</p>
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="withdrawalReason">Reason for Withdrawal</Label>
+                <Textarea
+                  id="withdrawalReason"
+                  placeholder="Provide a reason for withdrawing this leave application..."
+                  value={withdrawalReason}
+                  onChange={(e) => setWithdrawalReason(e.target.value)}
+                  rows={3}
+                  className="mt-2"
+                />
+              </div>
+              
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {application.status === 'approved' 
+                    ? 'Withdrawing an approved leave will restore the employee\'s leave balance.'
+                    : 'This will remove the leave application from the review queue.'}
+                  {' '}Withdrawal notifications will be sent to HR, managers, and administrators.
+                </AlertDescription>
+              </Alert>
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsWithdrawDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleWithdrawLeave}
+                  disabled={!withdrawalReason.trim() || withdrawLeaveApplication.isPending}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {withdrawLeaveApplication.isPending ? 'Withdrawing...' : 'Confirm Withdrawal'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Show disabled withdraw button for past leaves */}
+      {permissions?.canEdit && ['pending', 'approved'].includes(application.status) && !canWithdrawLeave() && (
+        <Button 
+          size="sm" 
+          variant="outline" 
+          disabled 
+          className="text-gray-400 cursor-not-allowed"
+          title="Cannot withdraw past leave applications"
+        >
+          <RotateCcw className="h-4 w-4 mr-1" />
+          Past Leave
+        </Button>
+      )}
     </div>
   );
 }
@@ -337,6 +475,9 @@ export function LeaveManagement() {
   // Leave Balances data
   const { data: leaveBalances, isLoading: balancesLoading } = useAllEmployeesLeaveBalances();
   const { data: adjustmentHistory, isLoading: historyLoading } = useLeaveBalanceAdjustments(undefined, 100);
+  
+  // Withdrawal logs data
+  const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();
   
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -482,10 +623,11 @@ export function LeaveManagement() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="applications">Leave Applications</TabsTrigger>
           <TabsTrigger value="balances">Leave Balances</TabsTrigger>
           <TabsTrigger value="history">Adjustment History</TabsTrigger>
+          <TabsTrigger value="withdrawals">Withdrawal Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="applications" className="space-y-6">
@@ -571,6 +713,7 @@ export function LeaveManagement() {
                       <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="withdrawn">Withdrawn</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1048,6 +1191,93 @@ export function LeaveManagement() {
                   <h3 className="text-lg font-semibold mb-2">No Adjustment History</h3>
                   <p className="text-muted-foreground">
                     No manual leave balance adjustments have been made yet.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="withdrawals" className="space-y-6">
+          {/* Withdrawal Logs */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RotateCcw className="h-5 w-5" />
+                Leave Withdrawal Logs
+              </CardTitle>
+              <CardDescription>
+                Track all leave applications that have been withdrawn by employees or administrators
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {withdrawalLogsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : withdrawalLogs && withdrawalLogs.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Leave Details</TableHead>
+                      <TableHead>Previous Status</TableHead>
+                      <TableHead>Withdrawal Reason</TableHead>
+                      <TableHead>Withdrawn By</TableHead>
+                      <TableHead>Withdrawn Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {withdrawalLogs.map((log: any) => (
+                      <TableRow key={log.id}>
+                        <TableCell>
+                          <div className="font-medium">{log.leave_application?.user?.full_name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            ID: {log.leave_application?.user?.employee_id}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">
+                                {log.leave_application?.leave_type?.name}
+                              </Badge>
+                              <span className="text-sm">{log.leave_application?.days_count} days</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(log.leave_application?.start_date), 'MMM dd')} - {format(new Date(log.leave_application?.end_date), 'MMM dd, yyyy')}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusBadge(log.previous_status)}>
+                            {log.previous_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm max-w-xs truncate" title={log.withdrawal_reason}>
+                            {log.withdrawal_reason}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{log.withdrawn_by_user?.full_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {log.withdrawn_by_user?.email}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(log.withdrawn_at), 'MMM dd, yyyy HH:mm')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8">
+                  <RotateCcw className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Withdrawal Logs</h3>
+                  <p className="text-muted-foreground">
+                    No leave applications have been withdrawn yet.
                   </p>
                 </div>
               )}

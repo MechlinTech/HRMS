@@ -94,7 +94,7 @@ function AppRoutes() {
             <LeaveApplication />
           </Suspense>
         } />
-        {/* <Route path="dashboard/documents" element={
+        <Route path="dashboard/documents" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Documents />
           </Suspense>
@@ -103,8 +103,8 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Complaints />
           </Suspense>
-        } /> */}
-        {/* <Route path="dashboard/performance" element={
+        } /> 
+        <Route path="dashboard/performance" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Performance />
           </Suspense>
@@ -113,7 +113,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ReferSomeone />
           </Suspense>
-        } /> */}
+        } />
         <Route path="dashboard/settings" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Settings />
@@ -129,17 +129,17 @@ function AppRoutes() {
             <EmployeeManagement />
           </Suspense>
         } />
-        {/* <Route path="employees/assets" element={
+        <Route path="employees/assets" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <AssetManagement />
           </Suspense>
-        } /> */}
+        } />
         <Route path="employees/leave" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <LeaveManagement />
           </Suspense>
         } />
-        {/* <Route path="employees/referrals" element={
+        <Route path="employees/referrals" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ReferralDashboard />
           </Suspense>
@@ -158,7 +158,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ProjectManagement />
           </Suspense>
-        } /> */}
+        } />
         <Route path="grievance" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <GrievanceDashboard />

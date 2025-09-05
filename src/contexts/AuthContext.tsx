@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   // Inactivity timeout configuration
-  const TIMEOUT_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+  const TIMEOUT_DURATION = 30 * 60 * 1000; // 10 minutes in milliseconds
   const WARNING_DURATION = 60 * 1000; // 1 minute warning
 
   // Inactivity timeout hook

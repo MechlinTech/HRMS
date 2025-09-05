@@ -104,12 +104,12 @@ export const secondTimeApi = {
         console.log('Sample profile email:', allProfiles[0].email);
       }
       
-      // Now try our specific query
+      // Now try our specific query with case-insensitive email comparison
       console.log('Executing specific query for email:', email);
       const { data: profiles, error: profileError } = await secondSupabase
         .from('profiles')
         .select('id')
-        .eq('email', email);
+        .eq('email', email.toLowerCase());
 
       if (profileError) {
         console.error('Error fetching profile:', profileError);

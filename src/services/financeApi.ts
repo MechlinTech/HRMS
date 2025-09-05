@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getTodayIST, getISTDateOffset } from '@/utils/dateUtils';
 import type { User } from '@/types';
 
 // Finance Dashboard API
@@ -8,7 +9,7 @@ export const financeApi = {
     const { data: billingRecords } = await supabase
       .from('billing_records')
       .select('client_name')
-      .gte('contract_end_date', new Date().toISOString().split('T')[0]);
+      .gte('contract_end_date', getTodayIST());
     
     const activeClients = new Set(billingRecords?.map(r => r.client_name)).size;
 
@@ -25,8 +26,8 @@ export const financeApi = {
     const { data: upcomingBilling } = await supabase
       .from('billing_records')
       .select('id, client_name, next_billing_date')
-      .gte('next_billing_date', new Date().toISOString().split('T')[0])
-      .lte('next_billing_date', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .gte('next_billing_date', getTodayIST())
+      .lte('next_billing_date', getISTDateOffset(7))
       .order('next_billing_date');
 
     // Get unpaid billing records (where billed_to_date < contract_value)

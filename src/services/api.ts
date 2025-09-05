@@ -4,6 +4,7 @@ import { financeApi } from './financeApi';
 import { atsApi } from './atsApi';
 import { notificationApi } from './notificationApi';
 import { FileUploadService } from './fileUpload';
+import { getTodayIST, getISTDateOffset, formatDateForDatabase } from '@/utils/dateUtils';
 import type { 
   User, 
   LeaveApplication, 
@@ -152,13 +153,8 @@ export const leaveApi = {
     return data;
   },
 
-  async triggerLeaveMaintenence() {
-    const { data, error } = await supabase
-      .rpc('manual_leave_maintenance');
-    
-    if (error) throw error;
-    return data;
-  },
+  // Automatic leave maintenance has been removed
+  // HR now manages leave allocations manually once a year
 
   // New functions for HR leave balance management
   async getAllEmployeesLeaveBalances(year: number = new Date().getFullYear()) {
@@ -328,9 +324,9 @@ export const leaveApi = {
   },
 
   async getEmployeesOnLeave(startDate?: string, endDate?: string) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayIST();
     const fromDate = startDate || today;
-    const toDate = endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Next 7 days
+    const toDate = endDate || getISTDateOffset(7); // Next 7 days
     
     const { data, error } = await supabase
       .from('leave_applications')
@@ -677,7 +673,7 @@ export const dashboardApi = {
     const { data, error } = await supabase
       .from('holidays')
       .select('*')
-      .gte('date', new Date().toISOString().split('T')[0])
+      .gte('date', getTodayIST())
       .order('date')
       .limit(4);
     
@@ -689,7 +685,7 @@ export const dashboardApi = {
 // Time tracking API
 export const timeTrackingApi = {
   async getTodayTimeEntries(userId: string) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayIST();
     const { data, error } = await supabase
       .from('time_entries')
       .select(`
@@ -1627,7 +1623,7 @@ export const bdTeamApi = {
     const { data: billingRecords } = await supabase
       .from('billing_records')
       .select('client_name')
-      .gte('contract_end_date', new Date().toISOString().split('T')[0]);
+      .gte('contract_end_date', getTodayIST());
     
     const activeClients = new Set(billingRecords?.map((r: any) => r.client_name)).size;
 
@@ -1644,7 +1640,7 @@ export const bdTeamApi = {
     const { data: overdueInvoices } = await supabase
       .from('invoices')
       .select('id')
-      .lt('due_date', new Date().toISOString().split('T')[0])
+      .lt('due_date', getTodayIST())
       .neq('status', 'paid');
     
     const overdueCount = overdueInvoices?.length || 0;

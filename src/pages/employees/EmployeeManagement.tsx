@@ -58,6 +58,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import {getRoleDisplayName} from '@/constants/index'
 
 const employeeSchema = z.object({
   id: z.string().uuid('Invalid employee ID'),
@@ -488,7 +489,7 @@ export function EmployeeManagement() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="capitalize">
-                          {employee.role?.name?.replace('_', ' ') || 'Not assigned'}
+                          {getRoleDisplayName(employee.role?.name) || 'Not assigned'}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -715,7 +716,7 @@ export function EmployeeManagement() {
                                         </div>
                                         <div>
                                           <p className="font-medium">Role:</p>
-                                          <p className="text-muted-foreground capitalize">{selectedEmployee.role?.name?.replace('_', ' ') || 'Not assigned'}</p>
+                                          <p className="text-muted-foreground capitalize">{getRoleDisplayName(selectedEmployee.role?.name) || 'Not assigned'}</p>
                                         </div>
                                         <div>
                                           <p className="font-medium">Manager:</p>
@@ -1432,7 +1433,7 @@ export function EmployeeManagement() {
                                 <SelectContent>
                                   {roleOptions?.map((role) => (
                                     <SelectItem key={role.id} value={role.id}>
-                                      {role.name.replace('_', ' ')}
+                                      {getRoleDisplayName(role.name)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

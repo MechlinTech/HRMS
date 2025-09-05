@@ -232,7 +232,7 @@ export function LoginForm() {
           {showInactivityMessage && (
             <Alert variant="default" className="border-amber-200 bg-amber-50">
               <AlertDescription className="text-amber-800">
-                You were logged out due to 10 minutes of inactivity. Please sign in again.
+                You were logged out due to 30 minutes of inactivity. Please sign in again.
               </AlertDescription>
             </Alert>
           )}

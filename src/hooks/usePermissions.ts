@@ -19,8 +19,7 @@ export function usePermissions() {
       roleName = ROLES.EMPLOYEE;
     }
     
-    // Super admin and admin have access to ALL dashboards
-    if (roleName === ROLES.SUPER_ADMIN || roleName === ROLES.ADMIN || 
+    if (user.isSA || roleName === ROLES.SUPER_ADMIN || roleName === ROLES.ADMIN || 
         roleName === 'super_admin' || roleName === 'admin') {
       const allDashboards = Object.values(DASHBOARDS);
       const allPages = allDashboards.flatMap(dashboardId => {
@@ -115,8 +114,7 @@ export function usePermissions() {
       roleName = ROLES.EMPLOYEE;
     }
     
-    // Super admin and admin have access to everything
-    if (roleName === 'super_admin' || roleName === 'admin') {
+    if (user.isSA || roleName === 'super_admin' || roleName === 'admin') {
       return true;
     }
 

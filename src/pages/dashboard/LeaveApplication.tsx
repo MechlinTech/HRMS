@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLeaveTypes, useLeaveBalance, useLeaveApplications, useCreateLeaveApplication, useEmployeesOnLeave, useUserLeaveSummary, useRecalculateUserBalance } from '@/hooks/useLeave';
+import { useLeaveTypes, useLeaveBalance, useLeaveApplications, useCreateLeaveApplication, useEmployeesOnLeave, useUserLeaveSummary, useRecalculateUserBalance, useWithdrawLeaveApplication } from '@/hooks/useLeave';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -27,7 +28,9 @@ import {
   Users,
   RefreshCw,
   Calculator,
-  TrendingUp
+  TrendingUp,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -35,6 +38,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from 'sonner';
 import { useUpcomingHolidays } from '@/hooks/useDashboard';
 import { useLocation } from 'react-router-dom';
+import { formatDateForDatabase, getTodayIST, isFutureDate, isPastDate } from '@/utils/dateUtils';
 
 const leaveTypeColors = {
   annual: 'bg-blue-500',
@@ -56,6 +60,7 @@ export function LeaveApplication() {
   const { data: leaveSummary, isLoading: summaryLoading } = useUserLeaveSummary();
   const createLeaveApplication = useCreateLeaveApplication();
   const recalculateBalance = useRecalculateUserBalance();
+  const withdrawLeaveApplication = useWithdrawLeaveApplication();
   
   const [selectedType, setSelectedType] = useState('');
   const [startDate, setStartDate] = useState<Date>();
@@ -63,6 +68,11 @@ export function LeaveApplication() {
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [defaultTab, setDefaultTab] = useState('apply');
+  
+  // Withdraw dialog state
+  const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
+  const [selectedLeaveForWithdraw, setSelectedLeaveForWithdraw] = useState<any>(null);
+  const [withdrawalReason, setWithdrawalReason] = useState('');
 
   // Check if we should open history tab based on URL hash
   useEffect(() => {
@@ -86,6 +96,8 @@ export function LeaveApplication() {
         return <XCircle className="h-4 w-4 text-red-600" />;
       case 'pending':
         return <Clock className="h-4 w-4 text-yellow-600" />;
+      case 'withdrawn':
+        return <RotateCcw className="h-4 w-4 text-gray-600" />;
       default:
         return <AlertCircle className="h-4 w-4 text-gray-600" />;
     }
@@ -96,8 +108,33 @@ export function LeaveApplication() {
       approved: 'bg-green-100 text-green-800',
       rejected: 'bg-red-100 text-red-800',
       pending: 'bg-yellow-100 text-yellow-800',
+      withdrawn: 'bg-gray-100 text-gray-800',
     };
     return variants[status as keyof typeof variants] || 'bg-gray-100 text-gray-800';
+  };
+
+  const handleWithdrawLeave = async () => {
+    if (!selectedLeaveForWithdraw || !withdrawalReason.trim()) return;
+
+    withdrawLeaveApplication.mutate({
+      applicationId: selectedLeaveForWithdraw.id,
+      reason: withdrawalReason.trim()
+    }, {
+      onSuccess: () => {
+        setIsWithdrawDialogOpen(false);
+        setSelectedLeaveForWithdraw(null);
+        setWithdrawalReason('');
+      }
+    });
+  };
+
+  const canWithdrawLeave = (leave: any) => {
+    if (!['pending', 'approved'].includes(leave.status)) {
+      return false;
+    }
+    
+    // Check if the leave is in the future (can only withdraw future leaves) using IST
+    return !isPastDate(leave.start_date);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -151,8 +188,8 @@ export function LeaveApplication() {
     createLeaveApplication.mutate({
       user_id: user.id,
       leave_type_id: leaveType.id,
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
+      start_date: formatDateForDatabase(startDate),
+      end_date: formatDateForDatabase(endDate),
       days_count: daysRequested,
       reason: reason.trim(),
       status: 'pending'
@@ -373,46 +410,17 @@ export function LeaveApplication() {
                         </div>
                       </div>
                       
-                      {/* Enhanced Information */}
+                      {/* Manual Allocation Information */}
                       <div className="border-t pt-3 space-y-2">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Monthly Rate</span>
-                          <span>{leaveSummary.rules?.current_monthly_rate || 0} days/month</span>
-                        </div>
-                        
-                        {leaveSummary.balance?.carry_forward_from_previous_year > 0 && (
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Carried Forward</span>
-                            <span>{leaveSummary.balance.carry_forward_from_previous_year} days</span>
-                          </div>
-                        )}
-                        
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>Tenure</span>
                           <span>{leaveSummary.user?.tenure_months || 0} months</span>
                         </div>
                         
-                        {/* Salary deduction warning for < 9 months tenure */}
-                        {leaveSummary.rules?.salary_deduction_warning && (
-                          <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 p-2 rounded">
-                            <AlertCircle className="h-3 w-3" />
-                            <span>{leaveSummary.rules.salary_deduction_warning}</span>
-                          </div>
-                        )}
-                        
-                        {leaveSummary.rules?.next_credit_date && leaveSummary.rules?.eligible_for_paid_leaves && (
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Next Credit</span>
-                            <span>{format(new Date(leaveSummary.rules.next_credit_date), 'MMM dd')}</span>
-                          </div>
-                        )}
-                        
-                        {!leaveSummary.rules?.can_carry_forward && leaveSummary.balance?.anniversary_reset_date && (
-                          <div className="flex items-center gap-1 text-xs text-amber-600">
-                            <AlertCircle className="h-3 w-3" />
-                            <span>Resets on {format(new Date(leaveSummary.balance.anniversary_reset_date), 'MMM dd, yyyy')}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          <Info className="h-3 w-3" />
+                          <span>Leave allocations are managed manually by HR once a year</span>
+                        </div>
                       </div>
                     </>
                   ) : (
@@ -538,56 +546,43 @@ export function LeaveApplication() {
         </TabsContent>
 
         <TabsContent value="balance" className="space-y-6">
-          {/* Leave Rules Information */}
-          {leaveSummary?.success && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-blue-800">
-                  <Info className="h-5 w-5" />
-                  Your Leave Entitlements
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p><strong>Current Status:</strong></p>
-                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                      <li>Tenure: {leaveSummary.user?.tenure_months || 0} months</li>
-                      <li>Monthly Rate: {leaveSummary.rules?.current_monthly_rate || 0} days/month</li>
-                      <li>Can Carry Forward: {leaveSummary.rules?.can_carry_forward ? 'Yes' : 'No'}</li>
-                      <li>Leave Applications: Always allowed</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <p><strong>Leave Rules:</strong></p>
-                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                      <li>&lt; 9 months: Can apply (salary deducted)</li>
-                      <li>9-11 months: 1 leave/month</li>
-                      <li>12+ months: 1.5 leaves/month</li>
-                      <li>2+ years: Can carry forward</li>
-                    </ul>
-                  </div>
+          {/* Manual Leave Allocation Information */}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-800">
+                <Info className="h-5 w-5" />
+                Leave Allocation Policy
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p><strong>Your Status:</strong></p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Tenure: {leaveSummary?.user?.tenure_months || 0} months</li>
+                    <li>Leave Applications: Always allowed</li>
+                    <li>Balance Allocated: {totalLeaveBalance} days for this year</li>
+                  </ul>
                 </div>
-                {leaveSummary.rules?.salary_deduction_warning && (
-                  <Alert className="mt-3 border-orange-200 bg-orange-50">
-                    <AlertCircle className="h-4 w-4 text-orange-600" />
-                    <AlertDescription className="text-orange-800">
-                      <strong>Salary Deduction Notice:</strong> {leaveSummary.rules.salary_deduction_warning}
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {leaveSummary.balance?.anniversary_reset_date && !leaveSummary.rules?.can_carry_forward && (
-                  <Alert className="mt-3">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Your leave balance will reset on {format(new Date(leaveSummary.balance.anniversary_reset_date), 'MMMM dd, yyyy')} 
-                      (your work anniversary). Unused leaves will be forfeited.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                <div>
+                  <p><strong>HR Policy:</strong></p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Leave allocations are set manually by HR</li>
+                    <li>Allocation happens once per year</li>
+                    <li>Contact HR for balance adjustments</li>
+                    <li>All leave applications require approval</li>
+                  </ul>
+                </div>
+              </div>
+              <Alert className="mt-3">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Note:</strong> Your leave balance is manually allocated by HR once a year. 
+                  If you have questions about your allocation, please contact the HR department.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {balanceLoading ? (
@@ -649,6 +644,7 @@ export function LeaveApplication() {
                       <TableHead>Status</TableHead>
                       <TableHead>Comments</TableHead>
                       <TableHead>Applied</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -678,6 +674,39 @@ export function LeaveApplication() {
                           )}
                         </TableCell>
                         <TableCell>{format(new Date(leave.applied_at), 'MMM dd, yyyy')}</TableCell>
+                        <TableCell>
+                          {canWithdrawLeave(leave) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedLeaveForWithdraw(leave);
+                                setIsWithdrawDialogOpen(true);
+                              }}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Withdraw
+                            </Button>
+                          )}
+                          {['pending', 'approved'].includes(leave.status) && !canWithdrawLeave(leave) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="text-gray-400 cursor-not-allowed"
+                              title="Cannot withdraw past leave applications"
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Past Leave
+                            </Button>
+                          )}
+                          {leave.status === 'withdrawn' && (
+                            <Badge variant="outline" className="text-gray-500">
+                              Withdrawn
+                            </Badge>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -691,6 +720,91 @@ export function LeaveApplication() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Withdraw Leave Application Dialog */}
+      <Dialog open={isWithdrawDialogOpen} onOpenChange={setIsWithdrawDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Leave Application</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to withdraw this leave application? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedLeaveForWithdraw && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Leave Type:</span>
+                    <span className="ml-2">{selectedLeaveForWithdraw.leave_type?.name}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Duration:</span>
+                    <span className="ml-2">{selectedLeaveForWithdraw.days_count} days</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Start Date:</span>
+                    <span className="ml-2">{format(new Date(selectedLeaveForWithdraw.start_date), 'MMM dd, yyyy')}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">End Date:</span>
+                    <span className="ml-2">{format(new Date(selectedLeaveForWithdraw.end_date), 'MMM dd, yyyy')}</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <span className="font-medium">Current Status:</span>
+                  <Badge className={cn("ml-2", getStatusBadge(selectedLeaveForWithdraw.status))}>
+                    {selectedLeaveForWithdraw.status}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="withdrawalReason">Reason for Withdrawal</Label>
+                <Textarea
+                  id="withdrawalReason"
+                  value={withdrawalReason}
+                  onChange={(e) => setWithdrawalReason(e.target.value)}
+                  placeholder="Please provide a reason for withdrawing this leave application..."
+                  rows={3}
+                  className="mt-2"
+                />
+              </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {selectedLeaveForWithdraw.status === 'approved' 
+                    ? 'Withdrawing an approved leave will restore your leave balance.'
+                    : 'Withdrawing this pending leave application will remove it from review.'}
+                  {' '}Note: Withdrawal notifications will be sent to HR, managers, and administrators.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex justify-end gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsWithdrawDialogOpen(false);
+                    setSelectedLeaveForWithdraw(null);
+                    setWithdrawalReason('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleWithdrawLeave}
+                  disabled={!withdrawalReason.trim() || withdrawLeaveApplication.isPending}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {withdrawLeaveApplication.isPending ? 'Withdrawing...' : 'Confirm Withdrawal'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

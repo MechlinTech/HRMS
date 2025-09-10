@@ -201,6 +201,7 @@ export function useLeaveWithdrawalLogs(applicationId?: string) {
             start_date,
             end_date,
             days_count,
+            user:users!user_id(id, full_name, employee_id),
             leave_type:leave_types!leave_type_id(name)
           ),
           withdrawn_by_user:users!withdrawn_by(full_name, email)

@@ -4,6 +4,7 @@ import { useAllLeaveApplications, useUpdateLeaveApplicationStatus, useLeaveAppli
 import { useWithdrawLeaveApplication } from '@/hooks/useLeave';
 import { useAllEmployeesLeaveBalances, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
 import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
+import { useSandwichLeavePreview, useHolidays, useRecalculateAllApprovedLeaveBalances } from '@/hooks/useSandwichLeave';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ import { format, differenceInDays } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { cn } from '@/lib/utils';
 import { isPastDate } from '@/utils/dateUtils';
+import { toast } from 'sonner';
 
 // Helper functions
 const getStatusIcon = (status: string) => {
@@ -158,7 +160,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
               </div>
               <div>
                 <p className="font-medium">Duration:</p>
-                <p className="text-muted-foreground">{application.days_count} days</p>
+                <p className="text-muted-foreground">
+                  {application.days_count} days
+                  {application.is_half_day && (
+                    <span className="ml-2 text-blue-600">
+                      ({application.half_day_period === '1st_half' ? '1st half' : 
+                        application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                    </span>
+                  )}
+                </p>
               </div>
               <div>
                 <p className="font-medium">Start Date:</p>
@@ -185,6 +195,65 @@ function LeaveApplicationActions({ application }: { application: any }) {
                 <p className="text-muted-foreground text-sm">{application.comments}</p>
               </div>
             )}
+                            {(application.is_sandwich_leave || application.sandwich_deducted_days) && (
+                              <div className="border-t pt-4">
+                                <p className="font-medium mb-2 text-orange-700">Leave Deduction Calculation:</p>
+                                <div className={cn(
+                                  "p-3 rounded-lg space-y-2",
+                                  application.is_sandwich_leave ? "bg-orange-50" : "bg-blue-50"
+                                )}>
+                                  <div className="flex justify-between text-sm">
+                                    <span>Actual Working Days:</span>
+                                    <span className="font-medium">{application.days_count}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span>Days Deducted from Balance:</span>
+                                    <span className={cn(
+                                      "font-medium",
+                                      application.is_sandwich_leave ? "text-orange-700" : "text-blue-700"
+                                    )}>
+                                      {application.sandwich_deducted_days || application.days_count}
+                                    </span>
+                                  </div>
+                                  {application.sandwich_deducted_days && application.sandwich_deducted_days !== application.days_count && (
+                                    <div className="flex justify-between text-sm">
+                                      <span>Additional Deduction:</span>
+                                      <span className="font-medium text-red-600">
+                                        +{(application.sandwich_deducted_days - application.days_count).toFixed(1)} days
+                                      </span>
+                                    </div>
+                                  )}
+                                  {application.sandwich_reason && (
+                                    <div className="text-sm">
+                                      <span className="font-medium">Calculation Rule:</span>
+                                      <p className="text-muted-foreground mt-1">{application.sandwich_reason}</p>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {application.is_sandwich_leave && (
+                                      <Badge className="bg-orange-100 text-orange-800 text-xs">
+                                        Sandwich Leave Applied
+                                      </Badge>
+                                    )}
+                                    {!application.is_sandwich_leave && application.sandwich_deducted_days && (
+                                      <Badge className="bg-blue-100 text-blue-800 text-xs">
+                                        Enhanced Calculation
+                                      </Badge>
+                                    )}
+                                    {application.sandwich_deducted_days === 1 && (
+                                      <Badge className="bg-green-100 text-green-800 text-xs">
+                                        Single Day Approved
+                                      </Badge>
+                                    )}
+                                    {application.sandwich_deducted_days === 3 && application.days_count === 1 && (
+                                      <Badge className="bg-red-100 text-red-800 text-xs">
+                                        Sandwich Penalty
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -213,7 +282,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   </div>
                   <div>
                     <span className="font-medium">Duration:</span>
-                    <span className="ml-2">{application.days_count} days</span>
+                    <span className="ml-2">
+                      {application.days_count} days
+                      {application.is_half_day && (
+                        <span className="ml-2 text-blue-600 text-xs">
+                          ({application.half_day_period === '1st_half' ? '1st half' : 
+                            application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium">Start Date:</span>
@@ -302,7 +379,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   </div>
                   <div>
                     <span className="font-medium">Duration:</span>
-                    <span className="ml-2">{application.days_count} days</span>
+                    <span className="ml-2">
+                      {application.days_count} days
+                      {application.is_half_day && (
+                        <span className="ml-2 text-blue-600 text-xs">
+                          ({application.half_day_period === '1st_half' ? '1st half' : 
+                            application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium">Current Status:</span>
@@ -479,6 +564,9 @@ export function LeaveManagement() {
   // Withdrawal logs data
   const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();
   
+  // Recalculation mutation
+  const recalculateBalances = useRecalculateAllApprovedLeaveBalances();
+  
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -613,14 +701,46 @@ export function LeaveManagement() {
             Manage employee leave applications and leave balances
           </p>
         </div>
-        <Button 
-          onClick={activeTab === 'applications' ? handleExportApplications : handleExportBalances} 
-          variant="outline"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export {activeTab === 'applications' ? 'Applications' : 'Balances'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => recalculateBalances.mutate(undefined, {
+              onSuccess: (result) => {
+                toast.success(`✅ ${result}`, {
+                  duration: 5000,
+                });
+                // Refetch data to show updated balances
+                window.location.reload();
+              },
+              onError: (error) => {
+                toast.error(`Failed to recalculate balances: ${error.message}`);
+              }
+            })}
+            variant="outline"
+            disabled={recalculateBalances.isPending}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Calculator className="h-4 w-4 mr-2" />
+            {recalculateBalances.isPending ? 'Recalculating...' : 'Recalculate Balances'}
+          </Button>
+          <Button 
+            onClick={activeTab === 'applications' ? handleExportApplications : handleExportBalances} 
+            variant="outline"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export {activeTab === 'applications' ? 'Applications' : 'Balances'}
+          </Button>
+        </div>
       </div>
+
+      {/* Enhanced Sandwich Leave System Info */}
+      <Alert className="bg-blue-50 border-blue-200">
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+          <strong>Enhanced Sandwich Leave System Active:</strong> Leave balances are automatically calculated using sandwich leave rules. 
+          Friday/Monday patterns, holiday exclusions, and approval-based deductions are now enforced. 
+          Use "Recalculate Balances" to update existing approved applications with correct calculations.
+        </AlertDescription>
+      </Alert>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
@@ -801,7 +921,26 @@ export function LeaveManagement() {
                           <TableCell>
                             <div className="text-center">
                               <div className="font-medium">{application.days_count}</div>
-                              <div className="text-xs text-muted-foreground">days</div>
+                              <div className="text-xs text-muted-foreground">
+                                {application.is_half_day ? (
+                                  <span className="text-blue-600">
+                                    {application.half_day_period === '1st_half' ? '1st half' : 
+                                     application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'}
+                                  </span>
+                                ) : (
+                                  'days'
+                                )}
+                              </div>
+                              {application.is_sandwich_leave && (
+                                <Badge className="bg-orange-100 text-orange-800 text-xs mt-1">
+                                  Sandwich: {application.sandwich_deducted_days} days
+                                </Badge>
+                              )}
+                              {application.sandwich_deducted_days && application.sandwich_deducted_days !== application.days_count && !application.is_sandwich_leave && (
+                                <Badge className="bg-blue-100 text-blue-800 text-xs mt-1">
+                                  Deducted: {application.sandwich_deducted_days} days
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1242,7 +1381,15 @@ export function LeaveManagement() {
                               <Badge variant="outline">
                                 {log.leave_application?.leave_type?.name}
                               </Badge>
-                              <span className="text-sm">{log.leave_application?.days_count} days</span>
+                              <span className="text-sm">
+                                {log.leave_application?.days_count} days
+                                {log.leave_application?.is_half_day && (
+                                  <span className="ml-1 text-blue-600 text-xs">
+                                    ({log.leave_application?.half_day_period === '1st_half' ? '1st half' : 
+                                      log.leave_application?.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                                  </span>
+                                )}
+                              </span>
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(log.leave_application?.start_date), 'MMM dd')} - {format(new Date(log.leave_application?.end_date), 'MMM dd, yyyy')}

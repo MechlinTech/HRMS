@@ -341,6 +341,66 @@ export const leaveApi = {
     
     if (error) throw error;
     return data;
+  },
+
+  async previewSandwichLeaveCalculation(
+    userId: string,
+    startDate: string,
+    endDate: string,
+    isHalfDay: boolean = false
+  ) {
+    const { data, error } = await supabase
+      .rpc('preview_sandwich_leave_calculation', {
+        p_user_id: userId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_is_half_day: isHalfDay
+      });
+    
+    if (error) throw error;
+    return data?.[0] || null;
+  },
+
+  async findRelatedFridayMondayApplications(
+    userId: string,
+    startDate: string,
+    endDate: string
+  ) {
+    const { data, error } = await supabase
+      .rpc('find_related_friday_monday_applications', {
+        p_user_id: userId,
+        p_start_date: startDate,
+        p_end_date: endDate
+      });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  async recalculateAllApprovedLeaveBalances() {
+    const { data, error } = await supabase
+      .rpc('recalculate_all_approved_leave_balances');
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllHolidays(year?: number) {
+    let query = supabase
+      .from('holidays')
+      .select('*')
+      .order('date');
+    
+    if (year) {
+      const yearStart = `${year}-01-01`;
+      const yearEnd = `${year}-12-31`;
+      query = query.gte('date', yearStart).lte('date', yearEnd);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    return data;
   }
 };
 
@@ -1021,7 +1081,7 @@ export const assetApi = {
       .from('asset_assignments')
       .select(`
         *,
-        asset:assets(name, asset_tag, brand, model),
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name, description), status),
         user:users!user_id(full_name, employee_id),
         assigned_by_user:users!assigned_by(full_name)
       `)
@@ -1048,13 +1108,19 @@ export const assetApi = {
       .insert(assignmentData)
       .select(`
         *,
-        asset:assets(name, asset_tag, brand, model),
-        user:users!user_id(full_name, employee_id),
-        assigned_by_user:users!assigned_by(full_name)
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        user:users!user_id(full_name, employee_id, email),
+        assigned_by_user:users!assigned_by(full_name),
+        vm:virtual_machines(vm_number, project_name, purpose, cloud_provider)
       `)
       .single();
     
     if (error) throw error;
+    
+    // Notifications are now handled automatically by database triggers
+    // This ensures notifications are sent even if the client disconnects
+    console.log('Asset assignment created successfully, notifications triggered via database triggers');
+    
     return data;
   },
 
@@ -1065,7 +1131,7 @@ export const assetApi = {
         *,
         category:asset_categories(name)
       `)
-      .eq('status', 'available')
+      .in('status', ['available', 'assigned'])  // Include both available and assigned assets for multiple assignments
       .order('name');
     
     if (error) throw error;
@@ -1142,6 +1208,107 @@ export const assetApi = {
     if (error) throw error;
   },
 
+  async getEmployeeDetails(userId: string) {
+    const { data, error } = await supabase
+      .rpc('get_employee_details', { p_user_id: userId });
+    
+    if (error) throw error;
+    return data[0];
+  },
+
+  async bulkAssignAsset(assignmentData: {
+    asset_id: string;
+    user_ids: string[];
+    assigned_by: string;
+    assignment_type: string;
+    assignment_expiry_date?: string;
+    condition_at_issuance?: string;
+    issuance_condition_notes?: string;
+    notes?: string;
+  }) {
+    const { data, error } = await supabase
+      .rpc('bulk_assign_asset', {
+        p_asset_id: assignmentData.asset_id,
+        p_user_ids: assignmentData.user_ids,
+        p_assigned_by: assignmentData.assigned_by,
+        p_assignment_type: assignmentData.assignment_type,
+        p_assignment_expiry_date: assignmentData.assignment_expiry_date,
+        p_condition_at_issuance: assignmentData.condition_at_issuance,
+        p_issuance_condition_notes: assignmentData.issuance_condition_notes,
+        p_notes: assignmentData.notes
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async unassignAssetFromAll(assetId: string, returnCondition?: string, returnNotes?: string) {
+    const { data, error } = await supabase
+      .rpc('unassign_asset_from_all', {
+        p_asset_id: assetId,
+        p_return_condition: returnCondition || 'good',
+        p_return_notes: returnNotes
+      });
+    
+    if (error) throw error;
+    
+    // Notifications for unassignment are handled automatically by database triggers
+    console.log('Asset unassigned successfully, notifications triggered via database triggers');
+    
+    return data;
+  },
+
+  async updateAssignmentCondition(assignmentId: string, condition: string, notes?: string) {
+    const { data, error } = await supabase
+      .rpc('update_assignment_condition', {
+        p_assignment_id: assignmentId,
+        p_condition_at_issuance: condition,
+        p_issuance_notes: notes
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async unassignSpecificUser(assignmentId: string, returnCondition?: string, returnNotes?: string) {
+    const { error } = await supabase
+      .from('asset_assignments')
+      .update({
+        is_active: false,
+        return_date: new Date().toISOString().split('T')[0],
+        return_condition_notes: returnNotes
+      })
+      .eq('id', assignmentId);
+    
+    if (error) throw error;
+    
+    // Check if this was the last assignment for this asset, if so update asset status
+    const { data: remainingAssignments } = await supabase
+      .from('asset_assignments')
+      .select('asset_id')
+      .eq('asset_id', (await supabase.from('asset_assignments').select('asset_id').eq('id', assignmentId).single()).data?.asset_id)
+      .eq('is_active', true);
+    
+    if (!remainingAssignments || remainingAssignments.length === 0) {
+      await supabase
+        .from('assets')
+        .update({ status: 'available' })
+        .eq('id', (await supabase.from('asset_assignments').select('asset_id').eq('id', assignmentId).single()).data?.asset_id);
+    }
+  },
+
+  async createAssetCategory(categoryData: { name: string; description?: string; depreciation_rate?: number }) {
+    const { data, error } = await supabase
+      .rpc('create_asset_category_if_not_exists', {
+        p_category_name: categoryData.name,
+        p_description: categoryData.description,
+        p_depreciation_rate: categoryData.depreciation_rate || 10.00
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
   async getAssetMetrics() {
     // Get total assets count
     const { data: totalAssets } = await supabase
@@ -1168,6 +1335,695 @@ export const assetApi = {
       maintenanceAssets: assetsByStatus.maintenance || 0,
       retiredAssets: assetsByStatus.retired || 0,
     };
+  },
+
+  async getCurrentNotesGuidance() {
+    const { data, error } = await supabase
+      .from('current_asset_notes_guidance')
+      .select('*')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  },
+
+  async createNotesGuidance(title: string, guidance_text: string) {
+    console.log('Creating notes guidance with:', { title, guidance_text });
+
+    // Simple insert without user references for now to test basic functionality
+    const { data, error } = await supabase
+      .from('asset_notes_guidance')
+      .insert({
+        title,
+        guidance_text
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating notes guidance:', error);
+      throw error;
+    }
+    
+    console.log('Successfully created notes guidance:', data);
+    return data;
+  },
+
+  async updateNotesGuidance(id: string, title: string, guidance_text: string) {
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('asset_notes_guidance')
+      .update({
+        title,
+        guidance_text,
+        updated_by: user.user.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteNotesGuidance(id: string) {
+    const { data, error } = await supabase
+      .from('asset_notes_guidance')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllNotesGuidance() {
+    const { data, error } = await supabase
+      .from('asset_notes_guidance')
+      .select(`
+        *,
+        created_by_user:users!created_by(full_name),
+        updated_by_user:users!updated_by(full_name)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getNotesGuidanceHistory() {
+    const { data, error } = await supabase
+      .from('asset_notes_guidance')
+      .select(`
+        *,
+        created_by_user:users!created_by(full_name),
+        updated_by_user:users!updated_by(full_name)
+      `)
+      .order('version', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Assignment Logs API
+  async getUserAssignmentLogs(userId: string) {
+    const { data, error } = await supabase
+      .rpc('get_user_assignment_logs', { p_user_id: userId });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getUsersWithAssignmentHistory() {
+    const { data, error } = await supabase
+      .rpc('get_users_with_assignment_history');
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllAssignmentLogs() {
+    const { data, error } = await supabase
+      .from('assignment_logs')
+      .select(`
+        *,
+        action_by_user:users!action_by(full_name)
+      `)
+      .order('action_date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async backfillAssignmentLogs() {
+    const { data, error } = await supabase
+      .rpc('backfill_assignment_logs');
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Get all assignments (including inactive ones) for backward compatibility
+  async getAllAssetAssignments() {
+    const { data, error } = await supabase
+      .from('asset_assignments')
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name, description)),
+        user:users!user_id(full_name, employee_id, status, department:departments!users_department_id_fkey(name)),
+        assigned_by_user:users!assigned_by(full_name)
+      `)
+      .order('assigned_date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Get user's assigned assets
+  async getUserAssets(userId: string) {
+    const { data, error } = await supabase
+      .from('asset_assignments')
+      .select(`
+        *,
+        asset:assets(
+          id,
+          name, 
+          asset_tag, 
+          brand, 
+          model, 
+          condition,
+          category:asset_categories(name, description)
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('assigned_date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Asset maintenance/support complaint functions
+  async createAssetComplaint(complaintData: {
+    user_id: string;
+    asset_id: string;
+    asset_assignment_id: string;
+    problem_description: string;
+    priority?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('asset_complaints')
+      .insert({
+        ...complaintData,
+        priority: complaintData.priority || 'medium',
+        status: 'open',
+        created_at: new Date().toISOString()
+      })
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        user:users!asset_complaints_user_id_fkey(full_name, employee_id)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserAssetComplaints(userId: string) {
+    const { data, error } = await supabase
+      .from('asset_complaints')
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        resolved_by_user:users!asset_complaints_resolved_by_fkey(full_name)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Get all asset complaints for admin view
+  async getAllAssetComplaints() {
+    const { data, error } = await supabase
+      .from('asset_complaints')
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        user:users!asset_complaints_user_id_fkey(full_name, employee_id),
+        resolved_by_user:users!asset_complaints_resolved_by_fkey(full_name)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Update complaint status and resolution
+  async updateAssetComplaint(complaintId: string, updates: {
+    status?: string;
+    priority?: string;
+    resolved_by?: string;
+    resolution_notes?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('asset_complaints')
+      .update(updates)
+      .eq('id', complaintId)
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        user:users!asset_complaints_user_id_fkey(full_name, employee_id),
+        resolved_by_user:users!asset_complaints_resolved_by_fkey(full_name)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Asset Requests API
+  async createAssetRequest(requestData: {
+    user_id: string;
+    category_id: string;
+    description: string;
+    justification?: string;
+    priority?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('asset_requests')
+      .insert(requestData)
+      .select(`
+        *,
+        category:asset_categories(name, description),
+        user:users!asset_requests_user_id_fkey(full_name, employee_id, manager_id)
+      `)
+      .single();
+    
+    if (error) throw error;
+    
+    // Notifications are now handled automatically by database triggers
+    // This ensures notifications are sent even if the client disconnects
+    console.log('Asset request created successfully, notifications triggered via database triggers');
+    
+    return data;
+  },
+
+  async getUserAssetRequests(userId: string) {
+    const { data, error } = await supabase
+      .from('asset_requests')
+      .select(`
+        *,
+        category:asset_categories(name, description),
+        approved_by_user:users!asset_requests_approved_by_fkey(full_name),
+        rejected_by_user:users!asset_requests_rejected_by_fkey(full_name),
+        fulfilled_by_user:users!asset_requests_fulfilled_by_fkey(full_name),
+        fulfilled_asset:assets(name, asset_tag, brand, model)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllAssetRequests() {
+    console.log('API: getAllAssetRequests called');
+    const { data, error } = await supabase
+      .from('asset_requests')
+      .select(`
+        *,
+        category:asset_categories(name, description),
+        user:users!asset_requests_user_id_fkey(full_name, employee_id, department:departments!users_department_id_fkey(name)),
+        approved_by_user:users!asset_requests_approved_by_fkey(full_name),
+        rejected_by_user:users!asset_requests_rejected_by_fkey(full_name),
+        fulfilled_by_user:users!asset_requests_fulfilled_by_fkey(full_name),
+        fulfilled_asset:assets(name, asset_tag, brand, model)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('API: getAllAssetRequests error:', error);
+      throw error;
+    }
+    console.log('API: getAllAssetRequests returned', data?.length || 0, 'requests');
+    return data;
+  },
+
+  // Get asset requests visible to current user based on RLS policies (managers see managed user requests)
+  // This will be filtered by RLS policies to only show requests from directly managed users
+  async getManagerAssetRequests() {
+    console.log('API: getManagerAssetRequests called');
+    const { data, error } = await supabase
+      .from('asset_requests')
+      .select(`
+        *,
+        category:asset_categories(name, description),
+        user:users!asset_requests_user_id_fkey(full_name, employee_id, department:departments!users_department_id_fkey(name)),
+        approved_by_user:users!asset_requests_approved_by_fkey(full_name),
+        rejected_by_user:users!asset_requests_rejected_by_fkey(full_name),
+        fulfilled_by_user:users!asset_requests_fulfilled_by_fkey(full_name),
+        fulfilled_asset:assets(name, asset_tag, brand, model)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('API: getManagerAssetRequests error:', error);
+      throw error;
+    }
+    console.log('API: getManagerAssetRequests returned', data?.length || 0, 'requests');
+    return data;
+  },
+
+  // Get asset assignments with manager filtering via RLS
+  async getManagerAssetAssignments() {
+    const { data, error } = await supabase
+      .from('asset_assignments')
+      .select(`
+        *,
+        asset:assets(
+          name, asset_tag, brand, model, condition, status,
+          category:asset_categories(name)
+        ),
+        user:users!asset_assignments_user_id_fkey(full_name, employee_id, department:departments!users_department_id_fkey(name)),
+        assigned_by_user:users!asset_assignments_assigned_by_fkey(full_name)
+      `)
+      .order('assigned_date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Get asset complaints with manager filtering via RLS
+  async getManagerAssetComplaints() {
+    const { data, error } = await supabase
+      .from('asset_complaints')
+      .select(`
+        *,
+        asset:assets(name, asset_tag, brand, model, category:asset_categories(name)),
+        user:users!asset_complaints_user_id_fkey(full_name, employee_id, department:departments!users_department_id_fkey(name)),
+        resolved_by_user:users!asset_complaints_resolved_by_fkey(full_name)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async updateAssetRequest(requestId: string, updates: {
+    status?: string;
+    approved_by?: string;
+    rejected_by?: string;
+    fulfilled_by?: string;
+    rejection_reason?: string;
+    approval_notes?: string;
+    fulfilled_asset_id?: string;
+    approved_at?: string;
+    rejected_at?: string;
+    fulfilled_at?: string;
+    manager_notified?: boolean;
+    hr_notified?: boolean;
+    admin_notified?: boolean;
+    approval_notification_sent?: boolean;
+  }) {
+    // Add timestamps for status changes
+    if (updates.status === 'approved' && !updates.approved_at) {
+      updates.approved_at = new Date().toISOString();
+    } else if (updates.status === 'rejected' && !updates.rejected_at) {
+      updates.rejected_at = new Date().toISOString();
+    } else if (updates.status === 'fulfilled' && !updates.fulfilled_at) {
+      updates.fulfilled_at = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from('asset_requests')
+      .update(updates)
+      .eq('id', requestId)
+      .select(`
+        *,
+        category:asset_categories(name, description),
+        user:users!asset_requests_user_id_fkey(full_name, employee_id, department:departments!users_department_id_fkey(name)),
+        approved_by_user:users!asset_requests_approved_by_fkey(full_name),
+        rejected_by_user:users!asset_requests_rejected_by_fkey(full_name),
+        fulfilled_by_user:users!asset_requests_fulfilled_by_fkey(full_name),
+        fulfilled_asset:assets(name, asset_tag, brand, model)
+      `)
+      .single();
+    
+    if (error) throw error;
+    
+    // Notifications for status changes are handled automatically by database triggers
+    console.log('Asset request updated successfully, status change notifications triggered via database triggers');
+    
+    return data;
+  }
+};
+
+// Virtual Machine Management API
+export const vmApi = {
+  async getAllVMs() {
+    const { data, error } = await supabase
+      .from('virtual_machines')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getVMAssignments() {
+    const { data, error } = await supabase
+      .from('vm_assignments_view')
+      .select('*')
+      .order('assigned_date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getAvailableVMs() {
+    const { data, error } = await supabase
+      .rpc('get_available_vms');
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserVMs(userId: string) {
+    const { data, error } = await supabase
+      .rpc('get_user_vms', { p_user_id: userId });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async createVM(vmData: any) {
+    const { data, error } = await supabase
+      .rpc('create_vm_with_assignment', {
+        p_vm_number: vmData.vm_number,
+        p_vm_location: vmData.vm_location,
+        p_access_type: vmData.access_type,
+        p_current_user_type: vmData.current_user_type,
+        p_requested_by: vmData.requested_by,
+        p_approved_by: vmData.approved_by,
+        p_created_by: vmData.created_by,
+        p_request_ticket_id: vmData.request_ticket_id,
+        p_purpose: vmData.purpose,
+        p_project_name: vmData.project_name,
+        p_username: vmData.username,
+        p_current_password: vmData.current_password,
+        p_previous_password: vmData.previous_password,
+        p_ip_address: vmData.ip_address,
+        p_ghost_ip: vmData.ghost_ip,
+        p_vpn_requirement: vmData.vpn_requirement,
+        p_mfa_enabled: vmData.mfa_enabled,
+        p_cloud_provider: vmData.cloud_provider,
+        p_backup_enabled: vmData.backup_enabled,
+        p_audit_status: vmData.audit_status,
+        p_approval_date: vmData.approval_date,
+        p_expiry_date: vmData.expiry_date,
+        p_assign_to_user_id: vmData.assign_to_user_id,
+        p_assigned_by_user_id: vmData.assigned_by_user_id,
+        p_assignment_notes: vmData.assignment_notes
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async assignVMToUser(vmId: string, userId: string, assignedBy: string, notes?: string) {
+    const { data, error } = await supabase
+      .rpc('assign_vm_to_user', {
+        p_vm_id: vmId,
+        p_user_id: userId,
+        p_assigned_by_user_id: assignedBy,
+        p_notes: notes
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async unassignVMFromUser(vmId: string, returnCondition: string = 'good') {
+    const { data, error } = await supabase
+      .rpc('unassign_vm_from_user', {
+        p_vm_id: vmId,
+        p_return_condition: returnCondition
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async updateVM(vmId: string, updates: any) {
+    // Transform password fields to match database schema
+    const transformedUpdates = { ...updates };
+    
+    // Map frontend password fields to database _hash fields
+    if (updates.current_password !== undefined) {
+      transformedUpdates.current_password_hash = updates.current_password;
+      delete transformedUpdates.current_password; // Remove the field that doesn't exist in DB
+    }
+    
+    if (updates.previous_password !== undefined) {
+      transformedUpdates.previous_password_hash = updates.previous_password;
+      delete transformedUpdates.previous_password; // Remove the field that doesn't exist in DB
+    }
+    
+    console.log('Updating VM with transformed data:', transformedUpdates);
+    
+    const { data, error } = await supabase
+      .from('virtual_machines')
+      .update(transformedUpdates)
+      .eq('id', vmId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteVM(vmId: string) {
+    // First unassign if assigned
+    await this.unassignVMFromUser(vmId);
+    
+    // Delete the VM record
+    const { error } = await supabase
+      .from('virtual_machines')
+      .delete()
+      .eq('id', vmId);
+    
+    if (error) throw error;
+  },
+
+  async getVMMetrics() {
+    // Get total VMs count
+    const { data: totalVMs } = await supabase
+      .from('virtual_machines')
+      .select('id, vm_location, cloud_provider, audit_status');
+    
+    // Get active VM assignments count
+    const { data: activeVMAssignments } = await supabase
+      .from('asset_assignments')
+      .select('id')
+      .eq('is_active', true)
+      .not('vm_id', 'is', null);
+    
+    // Get VMs by location
+    const vmsByLocation = totalVMs?.reduce((acc: any, vm: any) => {
+      acc[vm.vm_location] = (acc[vm.vm_location] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>) || {};
+    
+    // Get VMs by cloud provider
+    const vmsByProvider = totalVMs?.reduce((acc: any, vm: any) => {
+      acc[vm.cloud_provider] = (acc[vm.cloud_provider] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>) || {};
+    
+    // Get VMs by audit status
+    const vmsByAuditStatus = totalVMs?.reduce((acc: any, vm: any) => {
+      acc[vm.audit_status] = (acc[vm.audit_status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>) || {};
+    
+    return {
+      totalVMs: totalVMs?.length || 0,
+      activeVMAssignments: activeVMAssignments?.length || 0,
+      availableVMs: (totalVMs?.length || 0) - (activeVMAssignments?.length || 0),
+      vmsByLocation,
+      vmsByProvider,
+      vmsByAuditStatus
+    };
+  },
+
+  async getVMByAssetId(assetId: string) {
+    try {
+      // First, get the asset information to extract the VM number from asset_tag
+      const { data: asset, error: assetError } = await supabase
+        .from('assets')
+        .select('asset_tag, name')
+        .eq('id', assetId)
+        .single();
+      
+      if (assetError) {
+        console.error('Error fetching asset:', assetError);
+        return null;
+      }
+      
+      if (!asset?.asset_tag) {
+        console.log('No asset_tag found for asset:', assetId);
+        return null;
+      }
+      
+      // Check if this is a VM asset (asset_tag should start with 'VM-')
+      if (!asset.asset_tag.startsWith('VM-')) {
+        console.log('Asset is not a VM asset:', asset.asset_tag);
+        return null;
+      }
+      
+      // Extract VM number from asset_tag (e.g., 'VM-1001' -> '1001')
+      const vmNumber = asset.asset_tag.replace('VM-', '');
+      console.log('Extracted VM number:', vmNumber, 'from asset_tag:', asset.asset_tag);
+      
+      // Fetch VM data directly from virtual_machines table using vm_number
+      // Select specific columns to avoid schema cache issues
+      const { data: vmData, error: vmError } = await supabase
+        .from('virtual_machines')
+        .select(`
+          id,
+          vm_number,
+          vm_location,
+          access_type,
+          current_user_type,
+          requested_by,
+          approved_by,
+          created_by,
+          request_ticket_id,
+          purpose,
+          project_name,
+          username,
+          current_password_hash,
+          previous_password_hash,
+          ip_address,
+          ghost_ip,
+          vpn_requirement,
+          mfa_enabled,
+          cloud_provider,
+          backup_enabled,
+          audit_status,
+          approval_date,
+          expiry_date,
+          created_at,
+          updated_at
+        `)
+        .eq('vm_number', vmNumber)
+        .single();
+      
+      if (vmError) {
+        console.error('Error fetching VM data for vm_number:', vmNumber, vmError);
+        return null;
+      }
+      
+      // Transform the data to match the expected field names
+      // Map _hash columns to plain text field names for compatibility
+      const transformedVMData = {
+        ...vmData,
+        current_password: vmData.current_password_hash || '', // Map hash to plain text field
+        previous_password: vmData.previous_password_hash || '', // Map hash to plain text field
+      };
+      
+      console.log('Successfully fetched VM data:', transformedVMData);
+      return transformedVMData;
+      
+    } catch (error) {
+      console.error('Unexpected error in getVMByAssetId:', error);
+      return null;
+    }
   }
 };
 

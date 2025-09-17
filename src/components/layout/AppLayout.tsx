@@ -5,6 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AppSidebar } from './AppSidebar';
 import { DashboardSwitcher } from './DashboardSwitcher';
+import { PermissionDebugger } from '@/components/debug/PermissionDebugger';
 import { cn } from '@/lib/utils';
 
 export function AppLayout() {
@@ -64,6 +65,9 @@ export function AppLayout() {
           </div>
         </div>
       </main>
+      
+      {/* Permission Debugger - only in development */}
+      {/* {process.env.NODE_ENV === 'development' && <PermissionDebugger />} */}
     </div>
   );
 }

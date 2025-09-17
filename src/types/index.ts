@@ -101,6 +101,8 @@ export interface LeaveApplication {
   start_date: string;
   end_date: string;
   days_count: number;
+  is_half_day?: boolean;
+  half_day_period?: '1st_half' | '2nd_half';
   reason: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   applied_at: string;

@@ -115,6 +115,20 @@ function getNotificationUrl(type: string, data: Record<string, any>): string {
     case 'document_approved':
     case 'document_rejected':
       return '/dashboard/documents'
+    case 'asset_request_submitted':
+      // For managers/admin who can approve/monitor
+      return data?.target || '/employees/asset-management'
+    case 'asset_request_approved':
+    case 'asset_request_rejected':
+    case 'asset_request_fulfilled':
+      // For users to view their asset requests
+      return data?.target || '/dashboard/assets'
+    case 'asset_assigned':
+    case 'asset_unassigned':
+    case 'vm_assigned':
+    case 'vm_unassigned':
+      // For users to view their assigned assets
+      return data?.target || '/dashboard/assets'
     default:
       return '/dashboard'
   }

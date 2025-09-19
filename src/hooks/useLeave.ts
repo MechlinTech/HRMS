@@ -76,21 +76,33 @@ export function useWithdrawLeaveApplication() {
       
       if (appError) throw appError;
       
-      // Check if user owns this application or has admin privileges
+      // Check if user owns this application or has admin/hr/manager privileges
       const { data: currentUser, error: userError } = await supabase
         .from('users')
-        .select('id, role:roles(name)')
+        .select('id, "isSA", role:roles(name)')
         .eq('id', user.id)
         .single();
       
       if (userError) throw userError;
       
       const userRole = currentUser.role?.name || '';
-      const isAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'hr';
+      const isAdmin = currentUser.isSA || userRole === 'admin' || userRole === 'super_admin';
+      const isHR = userRole === 'hr';
       const isOwner = application.user_id === user.id;
       
-      if (!isOwner && !isAdmin) {
-        throw new Error('You can only withdraw your own leave applications');
+      // Check if current user is the manager of the application user
+      const { data: applicationUser, error: appUserError } = await supabase
+        .from('users')
+        .select('manager_id')
+        .eq('id', application.user_id)
+        .single();
+      
+      if (appUserError) throw appUserError;
+      
+      const isManager = applicationUser.manager_id === user.id;
+      
+      if (!isOwner && !isAdmin && !isHR && !isManager) {
+        throw new Error('You can only withdraw your own leave applications or applications of your team members if you are a manager/HR/admin');
       }
       
       // Check if application can be withdrawn (pending or approved)

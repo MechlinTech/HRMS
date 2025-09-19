@@ -305,10 +305,15 @@ export function useUpdateLeaveApplicationStatus() {
       queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
       queryClient.invalidateQueries({ queryKey: ['leave-applications'] });
       
+      // IMPORTANT: Also invalidate leave balance queries since approval updates balances
+      queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balance', data.user_id] });
+      queryClient.invalidateQueries({ queryKey: ['user-leave-summary', data.user_id] });
+      
       // The database trigger will automatically create the notification
       // and send push notification via the edge function
       
-      toast.success(`Leave application ${data.status} successfully!`);
+      toast.success(`Leave application ${data.status} successfully! Balance updated.`);
     },
     onError: (error) => {
       toast.error('Failed to update leave application');

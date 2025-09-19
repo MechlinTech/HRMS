@@ -219,12 +219,18 @@ export function LoginForm() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center items-center justify-center align-center">
           <CardTitle className="border border-orange-200/50 bg-white/70 backdrop-blur-sm shadow-md shadow-orange-100/20 p-3 px-4 rounded-xl">
+            
             <div className="flex items-center gap-2">
               <div className="h-10 w-10">
                 <img src={square_logo} alt="square logo"></img>
               </div>
               <span className="font-bold text-2xl bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">MECHLIN</span>
             </div>
+            {/* <div className="flex items-center gap-2">
+              <div className="h-full w-full">
+                <img src={mechlin_logo} alt="mechlin logo" className='w-full h-10'></img>
+              </div>
+            </div> */}
           </CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
@@ -320,7 +326,7 @@ export function LoginForm() {
             </Button> */}
           </div>
           
-          {/* <div className="relative">
+          <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -368,7 +374,7 @@ export function LoginForm() {
             >
               Don't have an account? Sign up
             </Button>
-          </div> */}
+          </div>
         </CardContent>
       </Card>
     </div>

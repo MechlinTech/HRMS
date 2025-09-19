@@ -483,7 +483,7 @@ export function DashboardOverview() {
                     value={projectDescription}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setProjectDescription(e.target.value)}
                     placeholder="E.g., Implemented feature X, fixed bug Y, meetings, etc."
-                    className="mt-2 bg-white/70 backdrop-blur-sm border-orange-200/50 "
+                    className="mt-2"
                     rows={3}
                   />
                 </div>
@@ -642,7 +642,7 @@ export function DashboardOverview() {
           </Card>
 
           {/* Quick Actions */}
-          {/* <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">
+          <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Frequently used features</CardDescription>
@@ -667,7 +667,7 @@ export function DashboardOverview() {
                 </Button>
               </div>
             </CardContent>
-          </Card> */}
+          </Card>
 
           {/* Today's Performance Overview */}
           <Card className="hover:shadow-2xl hover:shadow-orange-200/20 transition-all duration-300">

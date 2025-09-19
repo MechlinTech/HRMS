@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_DASHBOARD_MAPPING, DASHBOARD_CONFIG, ROLES } from '@/constants';
 import { DASHBOARDS } from '@/constants';
+import { hasUserDashboardAccess, hasUserPageAccess, getUserAccessiblePages } from '@/utils/featureAccess';
 
 export function usePermissions() {
   const { user } = useAuth();
@@ -104,103 +105,45 @@ export function usePermissions() {
   const hasAccess = (dashboardId: string, pageId?: string) => {
     if (!user) return false;
 
-    // Get user role
-    let roleName = '';
-    if (user.role?.name) {
-      roleName = user.role.name;
-    } else if (user.role_id) {
-      roleName = user.role_id;
-    } else {
-      roleName = ROLES.EMPLOYEE;
-    }
-    
-    if (user.isSA || roleName === 'super_admin' || roleName === 'admin') {
-      return true;
-    }
-
-    // For employees, check both role-based access and extra permissions
-    if (roleName === ROLES.EMPLOYEE || roleName === 'employee') {
-      const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
-      const hasExplicitAccess = user.extra_permissions?.dashboards?.[dashboardId] === true;
-      
-      if (!hasRoleAccess && !hasExplicitAccess) {
-        return false;
-      }
-      
-      if (pageId) {
-        return permissions.pages.some(
-          page => page.dashboard === dashboardId && page.id === pageId
-        );
-      }
-      
-      return true;
-    }
-    
-    // For ex-employees, allow access to both self and exit dashboards
-    if (roleName === ROLES.EX_EMPLOYEE || roleName === 'ex_employee') {
-      const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
-      
-      if (!hasRoleAccess) {
-        return false;
-      }
-      
-      if (pageId) {
-        return permissions.pages.some(
-          page => page.dashboard === dashboardId && page.id === pageId
-        );
-      }
-      
-      return true;
-    }
-    
-    // For non-employees, check access through any of the three hierarchies
-    const hasRoleAccess = (ROLE_DASHBOARD_MAPPING[roleName as keyof typeof ROLE_DASHBOARD_MAPPING] || []).includes(dashboardId);
-    const hasDepartmentAccess = user.extra_permissions?.department_dashboards?.[dashboardId] === true;
-    const hasExplicitAccess = user.extra_permissions?.dashboards?.[dashboardId] === true;
-    
-    if (!permissions.dashboards.includes(dashboardId)) {
-      return false;
-    }
-
+    // Use the new feature access utilities
     if (pageId) {
-      // Check page access through role, department, or explicit permissions (non-employees only)
-      const hasRolePageAccess = permissions.pages.some(
-        page => page.dashboard === dashboardId && page.id === pageId
-      );
-      
-      const hasDepartmentPageAccess = user.extra_permissions?.department_pages?.[dashboardId]?.[pageId] === true;
-      const hasExplicitPageAccess = user.extra_permissions?.pages?.[dashboardId]?.[pageId] === true;
-      
-      if (hasExplicitPageAccess || hasDepartmentPageAccess) {
-        return true;
-      }
-      
-      // Check for explicit feature restrictions
-      const featureRestrictions = user.extra_permissions?.features?.[dashboardId]?.[pageId];
-      if (featureRestrictions === false) {
-        return false;
-      }
-
-      return hasRolePageAccess;
+      return hasUserPageAccess(user, dashboardId, pageId);
+    } else {
+      return hasUserDashboardAccess(user, dashboardId);
     }
-
-    return true;
   };
 
   const getAccessibleDashboards = () => {
+    if (!user) return [];
+    
+    // Use the new feature access utility to get accessible dashboards
     const accessibleDashboards = DASHBOARD_CONFIG.filter(dashboard => 
-      permissions.dashboards.includes(dashboard.id)
-    );
+      hasUserDashboardAccess(user, dashboard.id)
+    ).map(dashboard => {
+      // Filter pages based on user permissions
+      const accessiblePageIds = getUserAccessiblePages(user, dashboard.id);
+      const accessiblePages = dashboard.pages.filter(page => 
+        accessiblePageIds.includes(page.id)
+      );
+      
+      return {
+        ...dashboard,
+        pages: accessiblePages
+      };
+    }).filter(dashboard => dashboard.pages.length > 0); // Only return dashboards with accessible pages
     
     return accessibleDashboards;
   };
 
   const getAccessiblePages = (dashboardId: string) => {
+    if (!user) return [];
+    
     const dashboard = DASHBOARD_CONFIG.find(d => d.id === dashboardId);
     if (!dashboard) return [];
 
+    // Use the new feature access utility
     return dashboard.pages.filter(page => 
-      hasAccess(dashboardId, page.id)
+      hasUserPageAccess(user, dashboardId, page.id)
     );
   };
 

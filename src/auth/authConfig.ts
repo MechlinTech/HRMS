@@ -6,8 +6,8 @@ export const msalConfig = {
         authority: 'https://login.microsoftonline.com/85707f27-830a-4b92-aa8c-3830bfb6c6f5/',
         // redirectUri: 'https://mechlin-hrms-duplica-zoat.bolt.host/',
         // postLogoutRedirectUri: 'https://mechlin-hrms-duplica-zoat.bolt.host/',
-        redirectUri: 'http://localhost:5173/',
-        postLogoutRedirectUri: 'http://localhost:5173/',
+        redirectUri: 'https://hrms.mechlintech.com/',
+        postLogoutRedirectUri: 'https://hrms.mechlintech.com/',
         navigateToLoginRequestUrl: false,
     },
     cache: {

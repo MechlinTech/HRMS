@@ -361,3 +361,98 @@ export const applyFilters = (data: any[], filters: any) => {
     });
   });
 };
+
+// Complaints Export Functions
+export const exportComplaintsToExcel = (data: any[], filters?: any) => {
+  // Transform data for Excel export
+  const excelData = data.map(complaint => ({
+    'Asset Name': complaint.asset?.name || 'N/A',
+    'Asset Tag': complaint.asset?.asset_tag || 'N/A',
+    'Asset Category': complaint.asset?.category?.name || 'N/A',
+    'User': complaint.user?.full_name || 'N/A',
+    'Employee ID': complaint.user?.employee_id || 'N/A',
+    'Department': complaint.user?.department?.name || 'N/A',
+    'Problem Description': complaint.problem_description || 'N/A',
+    'Priority': (complaint.priority || 'medium').toUpperCase(),
+    'Status': (complaint.status || 'open').toUpperCase(),
+    'Submitted Date': formatDate(complaint.created_at),
+    'Resolved By': complaint.resolved_by_user?.full_name || 'N/A',
+    'Resolution Date': formatDate(complaint.resolved_at),
+    'Resolution Notes': complaint.resolution_notes || 'N/A',
+    'Additional Info': complaint.additional_info || 'N/A'
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Asset Complaints');
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().split('T')[0];
+  const filename = `Asset_Complaints_${timestamp}.xlsx`;
+
+  // Write and download file
+  XLSX.writeFile(workbook, filename);
+};
+
+export const exportComplaintsToPDF = (data: any[], filters?: any) => {
+  const doc = new jsPDF();
+  
+  // Title
+  doc.setFontSize(16);
+  doc.text('Asset Complaints Report', 14, 22);
+  
+  // Add export info
+  doc.setFontSize(10);
+  doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 32);
+  doc.text(`Total Records: ${data.length}`, 14, 38);
+  
+  // Add filters info if provided
+  if (filters) {
+    let filterY = 44;
+    doc.text('Applied Filters:', 14, filterY);
+    filterY += 6;
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value && value !== 'all' && value !== '') {
+        const filterText = `${key.replace('_', ' ')}: ${value}`;
+        doc.text(filterText, 20, filterY);
+        filterY += 6;
+      }
+    });
+  }
+  
+  // Table data
+  const tableData = data.map(complaint => [
+    complaint.asset?.name || 'N/A',
+    complaint.user?.full_name || 'N/A',
+    complaint.problem_description || 'N/A',
+    (complaint.priority || 'medium').toUpperCase(),
+    (complaint.status || 'open').toUpperCase(),
+    formatDate(complaint.created_at),
+    complaint.resolved_by_user?.full_name || 'N/A',
+    formatDate(complaint.resolved_at),
+    complaint.resolution_notes || 'N/A'
+  ]);
+  
+  // Add table
+  autoTable(doc, {
+    head: [['Asset', 'User', 'Problem', 'Priority', 'Status', 'Submitted', 'Resolved By', 'Resolved Date', 'Resolution Notes']],
+    body: tableData,
+    startY: filters ? 70 : 50,
+    styles: { fontSize: 7, cellPadding: 2 },
+    headStyles: { fillColor: [63, 81, 181], fontSize: 7 },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    margin: { top: 20 },
+    columnStyles: {
+      2: { cellWidth: 25 }, // Problem Description
+      8: { cellWidth: 25 }  // Resolution Notes
+    }
+  });
+  
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().split('T')[0];
+  const filename = `Asset_Complaints_${timestamp}.pdf`;
+  
+  // Save file
+  doc.save(filename);
+};

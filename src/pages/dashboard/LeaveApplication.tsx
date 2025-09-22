@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeaveTypes, useLeaveBalance, useLeaveApplications, useCreateLeaveApplication, useEmployeesOnLeave, useUserLeaveSummary, useRecalculateUserBalance, useWithdrawLeaveApplication } from '@/hooks/useLeave';
+import { useSandwichLeavePreview, useRelatedFridayMondayApplications } from '@/hooks/useSandwichLeave';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +15,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Calendar as CalendarIcon,
   Clock,
   Plus,
-  FileText,
   CheckCircle,
   XCircle,
   AlertCircle,
@@ -28,17 +28,15 @@ import {
   Users,
   RefreshCw,
   Calculator,
-  TrendingUp,
-  Trash2,
   RotateCcw
 } from 'lucide-react';
-import { format, differenceInDays, addDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from 'sonner';
 import { useUpcomingHolidays } from '@/hooks/useDashboard';
 import { useLocation } from 'react-router-dom';
-import { formatDateForDatabase, getTodayIST, isFutureDate, isPastDate } from '@/utils/dateUtils';
+import { formatDateForDatabase, isPastDate } from '@/utils/dateUtils';
 
 const leaveTypeColors = {
   annual: 'bg-blue-500',
@@ -61,18 +59,23 @@ export function LeaveApplication() {
   const createLeaveApplication = useCreateLeaveApplication();
   const recalculateBalance = useRecalculateUserBalance();
   const withdrawLeaveApplication = useWithdrawLeaveApplication();
+  const sandwichLeavePreview = useSandwichLeavePreview();
+  const relatedApplications = useRelatedFridayMondayApplications();
   
   const [selectedType, setSelectedType] = useState('');
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [reason, setReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [defaultTab, setDefaultTab] = useState('apply');
+  const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDayPeriod, setHalfDayPeriod] = useState<'1st_half' | '2nd_half'>('1st_half');
   
   // Withdraw dialog state
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
   const [selectedLeaveForWithdraw, setSelectedLeaveForWithdraw] = useState<any>(null);
   const [withdrawalReason, setWithdrawalReason] = useState('');
+  const [sandwichCalculation, setSandwichCalculation] = useState<any>(null);
+  const [relatedApps, setRelatedApps] = useState<any[]>([]);
 
   // Check if we should open history tab based on URL hash
   useEffect(() => {
@@ -81,7 +84,48 @@ export function LeaveApplication() {
     }
   }, [location.hash]);
 
+  // Calculate sandwich leave preview when dates change
+  useEffect(() => {
+    if (startDate && endDate && user) {
+      // Calculate sandwich leave preview
+      sandwichLeavePreview.mutate({
+        startDate: formatDateForDatabase(startDate),
+        endDate: formatDateForDatabase(endDate),
+        isHalfDay,
+      }, {
+        onSuccess: (data) => {
+          setSandwichCalculation(data);
+        },
+        onError: (error) => {
+          console.error('Failed to calculate sandwich leave:', error);
+          setSandwichCalculation(null);
+        }
+      });
+
+      // Check for related Friday/Monday applications
+      relatedApplications.mutate({
+        startDate: formatDateForDatabase(startDate),
+        endDate: formatDateForDatabase(endDate),
+      }, {
+        onSuccess: (data) => {
+          setRelatedApps(data);
+        },
+        onError: (error) => {
+          console.error('Failed to find related applications:', error);
+          setRelatedApps([]);
+        }
+      });
+    } else {
+      setSandwichCalculation(null);
+      setRelatedApps([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, isHalfDay, user?.id]);
+
   const calculateDays = () => {
+    if (isHalfDay) {
+      return 0.5;
+    }
     if (startDate && endDate) {
       return differenceInDays(endDate, startDate) + 1;
     }
@@ -129,7 +173,9 @@ export function LeaveApplication() {
   };
 
   const canWithdrawLeave = (leave: any) => {
-    if (!['pending', 'approved'].includes(leave.status)) {
+    // Only pending leaves can be withdrawn by employees
+    // Approved leaves require manager/HR intervention
+    if (leave.status !== 'pending') {
       return false;
     }
     
@@ -154,43 +200,47 @@ export function LeaveApplication() {
       ? leaveSummary.balance?.remaining_days || 0
       : totalLeaveBalance - usedLeave;
     
-    // Check tenure and provide appropriate warnings
-    const tenureMonths = leaveSummary?.user?.tenure_months || 0;
-    const isEligibleForPaidLeaves = leaveSummary?.rules?.eligible_for_paid_leaves;
-    
-    // Warning for users with < 9 months tenure (all leave will be salary deduction)
-    if (tenureMonths < 9 || !isEligibleForPaidLeaves) {
-      const shouldProceed = window.confirm(
-        `You have ${tenureMonths} months of tenure. Since your tenure is less than 9 months, ` +
-        `ALL ${daysRequested} days will be deducted from your salary. ` +
-        `Do you want to proceed with this unpaid leave application?`
-      );
-      if (!shouldProceed) return;
-    }
-    // Warning for users with paid leave balance but requesting more than available
-    else if (daysRequested > remainingDays && remainingDays >= 0) {
-      const excessDays = daysRequested - remainingDays;
-      const shouldProceed = window.confirm(
-        `This request uses your ${remainingDays} available paid leave days plus ${excessDays} additional days. ` +
-        `The ${excessDays} excess days will be deducted from your salary. Do you want to proceed?`
-      );
-      if (!shouldProceed) return;
-    }
-    // For users with negative balance (already over their limit)
-    else if (remainingDays < 0) {
-      const shouldProceed = window.confirm(
-        `Your leave balance is already negative (${remainingDays} days). ` +
-        `All ${daysRequested} requested days will be deducted from your salary. Do you want to proceed?`
-      );
-      if (!shouldProceed) return;
+    // Check tenure and provide appropriate warnings only if leaveSummary is loaded
+    if (leaveSummary?.success && leaveSummary?.user) {
+      const tenureMonths = leaveSummary.user.tenure_months || 0;
+      const isEligibleForPaidLeaves = leaveSummary.rules?.eligible_for_paid_leaves;
+      
+      // Warning for users with < 9 months tenure (all leave will be salary deduction)
+      if (tenureMonths < 9 || !isEligibleForPaidLeaves) {
+        const shouldProceed = window.confirm(
+          `You have ${tenureMonths} months of tenure. Since your tenure is less than 9 months, ` +
+          `ALL ${daysRequested} days will be deducted from your salary. ` +
+          `Do you want to proceed with this unpaid leave application?`
+        );
+        if (!shouldProceed) return;
+      }
+      // Warning for users with paid leave balance but requesting more than available
+      else if (daysRequested > remainingDays && remainingDays >= 0) {
+        const excessDays = daysRequested - remainingDays;
+        const shouldProceed = window.confirm(
+          `This request uses your ${remainingDays} available paid leave days plus ${excessDays} additional days. ` +
+          `The ${excessDays} excess days will be deducted from your salary. Do you want to proceed?`
+        );
+        if (!shouldProceed) return;
+      }
+      // For users with negative balance (already over their limit)
+      else if (remainingDays < 0) {
+        const shouldProceed = window.confirm(
+          `Your leave balance is already negative (${remainingDays} days). ` +
+          `All ${daysRequested} requested days will be deducted from your salary. Do you want to proceed?`
+        );
+        if (!shouldProceed) return;
+      }
     }
 
     createLeaveApplication.mutate({
       user_id: user.id,
       leave_type_id: leaveType.id,
-      start_date: formatDateForDatabase(startDate),
-      end_date: formatDateForDatabase(endDate),
+      start_date: formatDateForDatabase(isHalfDay ? startDate : startDate),
+      end_date: formatDateForDatabase(isHalfDay ? startDate : endDate), // For half day, end date = start date
       days_count: daysRequested,
+      is_half_day: isHalfDay,
+      half_day_period: isHalfDay ? halfDayPeriod : undefined,
       reason: reason.trim(),
       status: 'pending'
     }, {
@@ -200,6 +250,8 @@ export function LeaveApplication() {
         setStartDate(undefined);
         setEndDate(undefined);
         setReason('');
+        setIsHalfDay(false);
+        setHalfDayPeriod('1st_half');
       }
     });
   };
@@ -268,9 +320,54 @@ export function LeaveApplication() {
                       </Select>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="halfDay" 
+                          checked={isHalfDay}
+                          onCheckedChange={(checked) => {
+                            setIsHalfDay(checked as boolean);
+                            // Reset end date when switching to half day
+                            if (checked) {
+                              setEndDate(startDate);
+                            }
+                          }}
+                        />
+                        <Label 
+                          htmlFor="halfDay" 
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          Half Day Leave (0.5 days)
+                        </Label>
+                      </div>
+
+                      {isHalfDay && (
+                        <div className="ml-6 space-y-2">
+                          <Label className="text-sm font-medium">Select Half Day Period</Label>
+                          <Select value={halfDayPeriod} onValueChange={(value: '1st_half' | '2nd_half') => setHalfDayPeriod(value)}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1st_half">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">1st Half</span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="2nd_half">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">2nd Half</span>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={cn("grid gap-4", isHalfDay ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
                       <div>
-                        <Label>Start Date</Label>
+                        <Label>{isHalfDay ? "Date" : "Start Date"}</Label>
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -281,54 +378,71 @@ export function LeaveApplication() {
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
-                              {startDate ? format(startDate, "PPP") : "Pick start date"}
+                              {startDate ? format(startDate, "PPP") : (isHalfDay ? "Pick date" : "Pick start date")}
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
                             <Calendar
                               mode="single"
                               selected={startDate}
-                              onSelect={setStartDate}
-                              disabled={(date) => date < new Date()}
+                              onSelect={(date) => {
+                                setStartDate(date);
+                                // For half day, automatically set end date to same as start date
+                                if (isHalfDay && date) {
+                                  setEndDate(date);
+                                }
+                              }}
+                              disabled={(date) => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                return date < today;
+                              }}
                               initialFocus
                             />
                           </PopoverContent>
                         </Popover>
                       </div>
 
-                      <div>
-                        <Label>End Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal mt-1",
-                                !endDate && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {endDate ? format(endDate, "PPP") : "Pick end date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={endDate}
-                              onSelect={setEndDate}
-                              disabled={(date) => date < (startDate || new Date())}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
+                      {!isHalfDay && (
+                        <div>
+                          <Label>End Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal mt-1",
+                                  !endDate && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {endDate ? format(endDate, "PPP") : "Pick end date"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                              <Calendar
+                                mode="single"
+                                selected={endDate}
+                                onSelect={setEndDate}
+                                disabled={(date) => date < (startDate || new Date())}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
                     </div>
 
-                    {startDate && endDate && (
+                    {startDate && (isHalfDay || endDate) && (
                       <Alert>
                         <Info className="h-4 w-4" />
                         <AlertDescription>
-                          Total days requested: <strong>{calculateDays()} days</strong>
+                          Total days requested: <strong>{calculateDays()} {calculateDays() === 1 ? 'day' : 'days'}</strong>
+                          {isHalfDay && (
+                            <span className="text-muted-foreground ml-2">
+                              ({halfDayPeriod === '1st_half' ? '1st Half' : '2nd Half'} on {format(startDate, "PPP")})
+                            </span>
+                          )}
                         </AlertDescription>
                       </Alert>
                     )}
@@ -345,10 +459,123 @@ export function LeaveApplication() {
                       />
                     </div>
 
+                    {/* Sandwich Leave Preview */}
+                    {sandwichCalculation && startDate && endDate && (
+                      <Card className={cn(
+                        "border-l-4",
+                        sandwichCalculation.is_sandwich_leave ? "border-l-orange-500" : "border-l-blue-500"
+                      )}>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Calculator className="h-4 w-4" />
+                            Leave Calculation Preview
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Actual Working Days:</span>
+                              <p className="font-medium">{sandwichCalculation.actual_days}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Days to be Deducted:</span>
+                              <p className={cn(
+                                "font-medium",
+                                sandwichCalculation.is_sandwich_leave ? "text-orange-600" : "text-green-600"
+                              )}>
+                                {sandwichCalculation.deducted_days}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {sandwichCalculation.is_sandwich_leave && (
+                            <Alert className="bg-orange-50 border-orange-200">
+                              <AlertCircle className="h-4 w-4 text-orange-600" />
+                              <AlertDescription className="text-orange-800">
+                                <strong>Sandwich Leave Applied:</strong> {sandwichCalculation.reason}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          
+                          {!sandwichCalculation.is_sandwich_leave && (
+                            <Alert className="bg-green-50 border-green-200">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <AlertDescription className="text-green-800">
+                                <strong>Normal Leave:</strong> {sandwichCalculation.reason}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+
+                          {/* Related Applications Warning */}
+                          {relatedApps.length > 0 && (
+                            <Alert className="bg-blue-50 border-blue-200">
+                              <Info className="h-4 w-4 text-blue-600" />
+                              <AlertDescription className="text-blue-800">
+                                <strong>Related Applications Found:</strong> You have {relatedApps.length} related Friday/Monday application(s). 
+                                Combined deduction will be {relatedApps[0]?.combined_deduction || 4} days total.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+
+                          {sandwichCalculation.details && (
+                            <div className="border-t pt-3">
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Total Days:</span>
+                                  <span>{sandwichCalculation.details.total_days}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Working Days:</span>
+                                  <span>{sandwichCalculation.details.working_days}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Weekend Days:</span>
+                                  <span>{sandwichCalculation.details.weekend_days}</span>
+                                </div>
+                                {sandwichCalculation.details.holiday_days > 0 && (
+                                  <div className="flex justify-between text-green-600">
+                                    <span>Holidays (Excluded):</span>
+                                    <span>{sandwichCalculation.details.holiday_days}</span>
+                                  </div>
+                                )}
+                                {sandwichCalculation.details.sandwich_days > 0 && (
+                                  <div className="flex justify-between text-orange-600">
+                                    <span>Sandwich Penalty:</span>
+                                    <span>+{sandwichCalculation.details.sandwich_days}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Business Rules Summary */}
+                              {sandwichCalculation.details.business_rules && (
+                                <div className="mt-3 p-2 bg-gray-50 rounded text-xs">
+                                  <p className="font-medium mb-1">Sandwich Leave Rules:</p>
+                                  <ul className="space-y-1 text-muted-foreground">
+                                    <li>• {sandwichCalculation.details.business_rules.continuous_fri_mon}</li>
+                                    <li>• {sandwichCalculation.details.business_rules.separate_fri_mon}</li>
+                                    <li>• {sandwichCalculation.details.business_rules.single_approved}</li>
+                                    <li>• {sandwichCalculation.details.business_rules.single_unapproved}</li>
+                                    <li>• {sandwichCalculation.details.business_rules.holidays_excluded}</li>
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
                     <Button 
                       type="submit" 
                       className="w-full"
-                      disabled={!selectedType || !startDate || !endDate || !reason.trim() || createLeaveApplication.isPending || startDate>endDate}
+                      disabled={
+                        !selectedType || 
+                        !startDate || 
+                        (!isHalfDay && !endDate) || 
+                        !reason.trim() || 
+                        createLeaveApplication.isPending || 
+                        (!isHalfDay && startDate && endDate && startDate > endDate)
+                      }
                     >
                       {createLeaveApplication.isPending ? 'Submitting...' : 'Submit Leave Application'}
                     </Button>
@@ -525,6 +752,10 @@ export function LeaveApplication() {
                           <div className="text-right">
                             <Badge variant="secondary" className="text-xs">
                               {leave.days_count} day{leave.days_count !== 1 ? 's' : ''}
+                              {leave.is_half_day && (
+                                leave.half_day_period === '1st_half' ? ' (1st half)' : 
+                                leave.half_day_period === '2nd_half' ? ' (2nd half)' : ' (Half Day)'
+                              )}
                             </Badge>
                           </div>
                         </div>
@@ -654,7 +885,15 @@ export function LeaveApplication() {
                         <TableCell>
                           {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd, yyyy')}
                         </TableCell>
-                        <TableCell>{leave.days_count}</TableCell>
+                        <TableCell>
+                          {leave.days_count}
+                          {leave.is_half_day && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {leave.half_day_period === '1st_half' ? '1st half' : 
+                               leave.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="max-w-xs truncate">{leave.reason}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -689,7 +928,19 @@ export function LeaveApplication() {
                               Withdraw
                             </Button>
                           )}
-                          {['pending', 'approved'].includes(leave.status) && !canWithdrawLeave(leave) && (
+                          {leave.status === 'approved' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="text-gray-400 cursor-not-allowed"
+                              title="Approved leaves cannot be withdrawn directly. Please contact your manager or HR department."
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Contact Manager/HR
+                            </Button>
+                          )}
+                          {leave.status === 'pending' && !canWithdrawLeave(leave) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -741,7 +992,13 @@ export function LeaveApplication() {
                   </div>
                   <div>
                     <span className="font-medium">Duration:</span>
-                    <span className="ml-2">{selectedLeaveForWithdraw.days_count} days</span>
+                    <span className="ml-2">
+                      {selectedLeaveForWithdraw.days_count} day{selectedLeaveForWithdraw.days_count !== 1 ? 's' : ''}
+                      {selectedLeaveForWithdraw.is_half_day && (
+                        selectedLeaveForWithdraw.half_day_period === '1st_half' ? ' (1st half)' : 
+                        selectedLeaveForWithdraw.half_day_period === '2nd_half' ? ' (2nd half)' : ' (Half Day)'
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium">Start Date:</span>
@@ -775,10 +1032,9 @@ export function LeaveApplication() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {selectedLeaveForWithdraw.status === 'approved' 
-                    ? 'Withdrawing an approved leave will restore your leave balance.'
-                    : 'Withdrawing this pending leave application will remove it from review.'}
+                  Withdrawing this pending leave application will remove it from review and restore your leave balance.
                   {' '}Note: Withdrawal notifications will be sent to HR, managers, and administrators.
+                  {' '}For approved leaves, please contact your manager or HR department directly.
                 </AlertDescription>
               </Alert>
 

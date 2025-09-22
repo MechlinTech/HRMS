@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeApi, assetApi, hrReferralsApi, hrExitApi } from '@/services/api';
+import { employeeApi, assetApi, vmApi, hrReferralsApi, hrExitApi } from '@/services/api';
 import { authApi } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -107,6 +107,22 @@ export function useAssetCategories() {
   });
 }
 
+export function useCreateAssetCategory() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: assetApi.createAssetCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-categories'] });
+      toast.success('Category created successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to create category');
+      console.error('Category creation error:', error);
+    },
+  });
+}
+
 export function useAvailableAssets() {
   return useQuery({
     queryKey: ['available-assets'],
@@ -118,9 +134,10 @@ export function useCreateAssetAssignment() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: assetApi.createAssetAssignment,
+    mutationFn: assetApi.bulkAssignAsset,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['available-assets'] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       toast.success('Asset assigned successfully!');
@@ -128,6 +145,82 @@ export function useCreateAssetAssignment() {
     onError: (error) => {
       toast.error('Failed to assign asset');
       console.error('Asset assignment error:', error);
+    },
+  });
+}
+
+export function useGetEmployeeDetails() {
+  return useMutation({
+    mutationFn: assetApi.getEmployeeDetails,
+    onError: (error) => {
+      console.error('Failed to get employee details:', error);
+    },
+  });
+}
+
+export function useUnassignAsset() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ assetId, returnCondition, returnNotes }: { 
+      assetId: string; 
+      returnCondition?: string; 
+      returnNotes?: string 
+    }) => assetApi.unassignAssetFromAll(assetId, returnCondition, returnNotes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['available-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      toast.success('Asset unassigned successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to unassign asset');
+      console.error('Asset unassignment error:', error);
+    },
+  });
+}
+
+export function useUpdateAssignmentCondition() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ assignmentId, condition, notes }: { 
+      assignmentId: string; 
+      condition: string; 
+      notes?: string 
+    }) => assetApi.updateAssignmentCondition(assignmentId, condition, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
+      toast.success('Assignment condition updated successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to update assignment condition');
+      console.error('Assignment condition update error:', error);
+    },
+  });
+}
+
+export function useUnassignSpecificUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ assignmentId, returnCondition, returnNotes }: { 
+      assignmentId: string; 
+      returnCondition?: string; 
+      returnNotes?: string 
+    }) => assetApi.unassignSpecificUser(assignmentId, returnCondition, returnNotes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['available-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      toast.success('User unassigned successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to unassign user');
+      console.error('User unassignment error:', error);
     },
   });
 }
@@ -160,6 +253,7 @@ export function useUpdateAsset() {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['available-assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['asset-metrics'] });
       toast.success('Asset updated successfully!');
     },
@@ -196,6 +290,7 @@ export function useUpdateAssetAssignment() {
       assetApi.updateAssetAssignment(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-metrics'] });
       toast.success('Asset assignment updated successfully!');
@@ -214,6 +309,7 @@ export function useDeleteAssetAssignment() {
     mutationFn: assetApi.deleteAssetAssignment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-metrics'] });
       toast.success('Asset assignment deleted successfully!');
@@ -230,6 +326,148 @@ export function useAssetMetrics() {
     queryKey: ['asset-metrics'],
     queryFn: assetApi.getAssetMetrics,
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+// Virtual Machine Management Hooks
+export function useVMs() {
+  return useQuery({
+    queryKey: ['vms'],
+    queryFn: vmApi.getAllVMs,
+  });
+}
+
+export function useVMAssignments() {
+  return useQuery({
+    queryKey: ['vm-assignments'],
+    queryFn: vmApi.getVMAssignments,
+  });
+}
+
+export function useAvailableVMs() {
+  return useQuery({
+    queryKey: ['available-vms'],
+    queryFn: vmApi.getAvailableVMs,
+  });
+}
+
+export function useUserVMs(userId?: string) {
+  return useQuery({
+    queryKey: ['user-vms', userId],
+    queryFn: () => userId ? vmApi.getUserVMs(userId) : Promise.resolve([]),
+    enabled: !!userId,
+  });
+}
+
+export function useCreateVM() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: vmApi.createVM,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vms'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['asset-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['all-asset-assignments'] });
+      toast.success('VM created successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to create VM');
+      console.error('VM creation error:', error);
+    },
+  });
+}
+
+export function useAssignVM() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ vmId, userId, assignedBy, notes }: { 
+      vmId: string; 
+      userId: string; 
+      assignedBy: string; 
+      notes?: string 
+    }) => vmApi.assignVMToUser(vmId, userId, assignedBy, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vm-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['user-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-metrics'] });
+      toast.success('VM assigned successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to assign VM');
+      console.error('VM assignment error:', error);
+    },
+  });
+}
+
+export function useUnassignVM() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ vmId, returnCondition }: { vmId: string; returnCondition?: string }) =>
+      vmApi.unassignVMFromUser(vmId, returnCondition),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vm-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['user-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-metrics'] });
+      toast.success('VM unassigned successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to unassign VM');
+      console.error('VM unassignment error:', error);
+    },
+  });
+}
+
+export function useUpdateVM() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) =>
+      vmApi.updateVM(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-metrics'] });
+      toast.success('VM updated successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to update VM');
+      console.error('VM update error:', error);
+    },
+  });
+}
+
+export function useDeleteVM() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: vmApi.deleteVM,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vms'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vms'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['vm-metrics'] });
+      toast.success('VM deleted successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to delete VM');
+      console.error('VM deletion error:', error);
+    },
+  });
+}
+
+export function useVMMetrics() {
+  return useQuery({
+    queryKey: ['vm-metrics'],
+    queryFn: vmApi.getVMMetrics,
   });
 }
 
@@ -320,6 +558,303 @@ export function useUpdateExitProcess() {
     onError: (error) => {
       toast.error('Failed to update exit process');
       console.error('Exit process update error:', error);
+    },
+  });
+}
+
+// Additional VM Hook
+export function useVMByAssetId(assetId: string) {
+  return useQuery({
+    queryKey: ['vm-by-asset', assetId],
+    queryFn: () => vmApi.getVMByAssetId(assetId),
+    enabled: !!assetId,
+    retry: false, // Don't retry if no VM is found
+    staleTime: 5 * 60 * 1000, // Keep data fresh for 5 minutes
+  });
+}
+
+// Notes Guidance hooks
+export function useNotesGuidance() {
+  return useQuery({
+    queryKey: ['notes-guidance'],
+    queryFn: assetApi.getCurrentNotesGuidance,
+  });
+}
+
+export function useAllNotesGuidance() {
+  return useQuery({
+    queryKey: ['all-notes-guidance'],
+    queryFn: assetApi.getAllNotesGuidance,
+  });
+}
+
+export function useCreateNotesGuidance() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ title, guidance_text }: { title: string; guidance_text: string }) =>
+      assetApi.createNotesGuidance(title, guidance_text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['all-notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance-history'] });
+      toast.success('Notes guidance created successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Notes guidance creation error:', error);
+      
+      // Check for specific permission errors
+      if (error?.code === '42501' || error?.message?.includes('permission')) {
+        toast.error('Permission denied. You need admin/HR privileges to create guidance.');
+      } else if (error?.message?.includes('RLS')) {
+        toast.error('Access denied. Please check your user permissions.');
+      } else {
+        toast.error(`Failed to create notes guidance: ${error?.message || 'Unknown error'}`);
+      }
+    },
+  });
+}
+
+export function useUpdateNotesGuidance() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ id, title, guidance_text }: { id: string; title: string; guidance_text: string }) =>
+      assetApi.updateNotesGuidance(id, title, guidance_text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['all-notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance-history'] });
+      toast.success('Notes guidance updated successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Notes guidance update error:', error);
+      
+      // Check for specific permission errors
+      if (error?.code === '42501' || error?.message?.includes('permission')) {
+        toast.error('Permission denied. You need admin/HR privileges to update guidance.');
+      } else if (error?.message?.includes('RLS') || error?.message?.includes('policy')) {
+        toast.error('Access denied. Please check your user permissions.');
+      } else {
+        toast.error(`Failed to update notes guidance: ${error?.message || 'Unknown error'}`);
+      }
+    },
+  });
+}
+
+export function useDeleteNotesGuidance() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (id: string) => assetApi.deleteNotesGuidance(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['all-notes-guidance'] });
+      queryClient.invalidateQueries({ queryKey: ['notes-guidance-history'] });
+      toast.success('Notes guidance deleted successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to delete notes guidance');
+      console.error('Notes guidance deletion error:', error);
+    },
+  });
+}
+
+export function useNotesGuidanceHistory() {
+  return useQuery({
+    queryKey: ['notes-guidance-history'],
+    queryFn: assetApi.getNotesGuidanceHistory,
+  });
+}
+
+// Assignment Logs Hooks
+export function useUserAssignmentLogs(userId: string) {
+  return useQuery({
+    queryKey: ['user-assignment-logs', userId],
+    queryFn: () => assetApi.getUserAssignmentLogs(userId),
+    enabled: !!userId,
+  });
+}
+
+export function useUsersWithAssignmentHistory() {
+  return useQuery({
+    queryKey: ['users-with-assignment-history'],
+    queryFn: assetApi.getUsersWithAssignmentHistory,
+  });
+}
+
+export function useAllAssignmentLogs() {
+  return useQuery({
+    queryKey: ['all-assignment-logs'],
+    queryFn: assetApi.getAllAssignmentLogs,
+  });
+}
+
+export function useAllAssetAssignments() {
+  return useQuery({
+    queryKey: ['all-asset-assignments'],
+    queryFn: assetApi.getAllAssetAssignments,
+  });
+}
+
+export function useBackfillAssignmentLogs() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: assetApi.backfillAssignmentLogs,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['user-assignment-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['users-with-assignment-history'] });
+      queryClient.invalidateQueries({ queryKey: ['all-assignment-logs'] });
+      toast.success(`Successfully backfilled ${result} assignment logs!`);
+    },
+    onError: (error) => {
+      toast.error('Failed to backfill assignment logs');
+      console.error('Backfill error:', error);
+    },
+  });
+}
+
+// User assets hooks
+export function useUserAssets(userId?: string) {
+  return useQuery({
+    queryKey: ['userAssets', userId],
+    queryFn: () => assetApi.getUserAssets(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useCreateAssetComplaint() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: assetApi.createAssetComplaint,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userAssetComplaints'] });
+      toast.success('Complaint submitted successfully');
+    },
+    onError: (error) => {
+      console.error('Error creating asset complaint:', error);
+      toast.error('Failed to submit complaint');
+    },
+  });
+}
+
+export function useUserAssetComplaints(userId?: string) {
+  return useQuery({
+    queryKey: ['userAssetComplaints', userId],
+    queryFn: () => assetApi.getUserAssetComplaints(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useAllAssetComplaints() {
+  return useQuery({
+    queryKey: ['allAssetComplaints'],
+    queryFn: assetApi.getAllAssetComplaints,
+  });
+}
+
+export function useUpdateAssetComplaint() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ complaintId, updates }: { complaintId: string; updates: any }) => 
+      assetApi.updateAssetComplaint(complaintId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allAssetComplaints'] });
+      queryClient.invalidateQueries({ queryKey: ['userAssetComplaints'] });
+      toast.success('Complaint updated successfully');
+    },
+    onError: (error) => {
+      console.error('Error updating asset complaint:', error);
+      toast.error('Failed to update complaint');
+    },
+  });
+}
+
+// Asset Request hooks
+export function useCreateAssetRequest() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: assetApi.createAssetRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['allAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetComplaints'] });
+      toast.success('Asset request submitted successfully!');
+    },
+    onError: (error) => {
+      toast.error('Failed to submit asset request');
+      console.error('Asset request creation error:', error);
+    },
+  });
+}
+
+export function useUserAssetRequests(userId?: string) {
+  return useQuery({
+    queryKey: ['userAssetRequests', userId],
+    queryFn: () => assetApi.getUserAssetRequests(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useAllAssetRequests() {
+  console.log('Hook: useAllAssetRequests called');
+  return useQuery({
+    queryKey: ['allAssetRequests'],
+    queryFn: () => {
+      console.log('Hook: useAllAssetRequests queryFn executing');
+      return assetApi.getAllAssetRequests();
+    },
+  });
+}
+
+export function useManagerAssetRequests() {
+  console.log('Hook: useManagerAssetRequests called');
+  return useQuery({
+    queryKey: ['managerAssetRequests'],
+    queryFn: () => {
+      console.log('Hook: useManagerAssetRequests queryFn executing');
+      return assetApi.getManagerAssetRequests();
+    },
+  });
+}
+
+export function useManagerAssetAssignments() {
+  return useQuery({
+    queryKey: ['managerAssetAssignments'],
+    queryFn: assetApi.getManagerAssetAssignments,
+  });
+}
+
+export function useManagerAssetComplaints() {
+  return useQuery({
+    queryKey: ['managerAssetComplaints'],
+    queryFn: assetApi.getManagerAssetComplaints,
+  });
+}
+
+export function useUpdateAssetRequest() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ requestId, updates }: { requestId: string; updates: any }) => 
+      assetApi.updateAssetRequest(requestId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['userAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['managerAssetComplaints'] });
+      toast.success('Asset request updated successfully');
+    },
+    onError: (error) => {
+      console.error('Error updating asset request:', error);
+      toast.error('Failed to update asset request');
     },
   });
 }

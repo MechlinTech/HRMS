@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   useAllEmployees, 
-  useUpdateUserPermissions,
   useUpdateEmployee,
   useAssetMetrics 
 } from '@/hooks/useEmployees';
@@ -11,53 +10,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { DashboardAccessManager } from '@/components/dashboard/DashboardAccessManager';
 import {
   Users,
-  Search,
-  Download,
   Eye,
   Filter,
-  Calendar,
   Phone,
   Mail,
   Building,
   UserCheck,
-  Clock,
   DollarSign,
   Package,
-  UserPlus,
-  LogOut,
   Shield,
   Edit,
-  Trash2,
-  Save,
-  X,
-  TrendingUp,
   Monitor,
   CheckCircle,
-  AlertTriangle,
-  Check,
-  ChevronsUpDown
+  AlertTriangle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { cn } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { toast } from 'sonner';
 import {getRoleDisplayName} from '@/constants/index'
 
 const employeeSchema = z.object({
@@ -107,18 +89,41 @@ const employeeSchema = z.object({
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
+interface Employee {
+  id: string;
+  full_name: string;
+  employee_id?: string;
+  email: string;
+  phone?: string;
+  position?: string;
+  department?: { name: string };
+  role?: { name: string };
+  role_id?: string;
+  status: string;
+  avatar_url?: string;
+  auth_provider?: 'microsoft' | 'google' | 'manual';
+  provider_user_id?: string;
+  extra_permissions?: {
+    dashboards?: Record<string, boolean>;
+    pages?: Record<string, Record<string, boolean>>;
+    [key: string]: any;
+  };
+  created_at?: string;
+  [key: string]: any;
+}
+
 export function EmployeeManagement() {
   const { data: employees, isLoading: employeesLoading } = useAllEmployees();
-  const { data: assetMetrics, isLoading: metricsLoading } = useAssetMetrics();
+  const { data: assetMetrics } = useAssetMetrics();
   const updateEmployee = useUpdateEmployee();
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [selectedEmployeeForAccess, setSelectedEmployeeForAccess] = useState<any>(null);
+  const [selectedEmployeeForAccess, setSelectedEmployeeForAccess] = useState<Employee | null>(null);
   const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<any>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [activeTab, setActiveTab] = useState('basic');
   const [viewActiveTab, setViewActiveTab] = useState('basic');
 
@@ -202,38 +207,17 @@ export function EmployeeManagement() {
     },
   });
 
-  const filteredEmployees = employees?.filter(emp => {
+  const filteredEmployees = employees?.filter((emp: Employee) => {
     const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = !departmentFilter || departmentFilter === 'all' || emp.department?.name === departmentFilter;
-    const matchesRole = !roleFilter || roleFilter === 'all' || emp.role?.name === roleFilter;
+    const matchesDepartment = !departmentFilter || departmentFilter === 'all' || emp.department_id === departmentFilter;
+    const matchesRole = !roleFilter || roleFilter === 'all' || emp.role_id === roleFilter;
     
     return matchesSearch && matchesDepartment && matchesRole;
   });
 
-  const departments = [...new Set(employees?.map(emp => emp.department?.name).filter(Boolean))];
-  const roles = [...new Set(employees?.map(emp => emp.role?.name).filter(Boolean))];
-
-  // Helper functions for displaying selected users and filtering
-  const getSelectedUserDisplay = (userId: string) => {
-    if (!userId || userId === 'none' || !userOptions) return null;
-    const user = userOptions.find(u => u.id === userId);
-    return user ? { name: user.full_name, email: user.email } : null;
-  };
-
-  // Filter users based on search terms
-  const getFilteredUsers = (searchTerm: string) => {
-    if (!userOptions) return [];
-    if (!searchTerm.trim()) return userOptions;
-    
-    return userOptions.filter(user => 
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
-
-  const handleEditEmployee = (employee: any) => {
+  const handleEditEmployee = (employee: Employee) => {
     setEditingEmployee(employee);
     form.reset({
       id: employee.id,
@@ -364,7 +348,7 @@ export function EmployeeManagement() {
       <Tabs defaultValue="employees" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="employees">All Employees</TabsTrigger>
-          {/* <TabsTrigger value="assets">Asset Management</TabsTrigger> */}
+          <TabsTrigger value="assets">Asset Management</TabsTrigger>
         </TabsList>
 
         <TabsContent value="employees" className="space-y-6">
@@ -379,7 +363,9 @@ export function EmployeeManagement() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
+                <Label htmlFor="filter-employee-name" className='mb-2 ml-2'>Employee Name</Label>
                   <Input
+                    id="filter-employee-name"
                     placeholder="Search employees..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -387,32 +373,34 @@ export function EmployeeManagement() {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="filter-department" className='mb-2'>Department</Label>
                   <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger >
                       <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Departments</SelectItem>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      {departmentOptions?.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
+                  <Label htmlFor="filter-role" className='mb-2'>Role</Label>
                   <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger >
                       <SelectValue placeholder="All Roles" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Roles</SelectItem>
-                      {roles.map((role) => (
-                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                      {roleOptions?.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>{getRoleDisplayName(role.name)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className='mt-4'>
                   <Button 
                     variant="outline" 
                     onClick={() => {
@@ -450,7 +438,7 @@ export function EmployeeManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEmployees?.map((employee) => (
+                  {filteredEmployees?.map((employee: Employee) => (
                     <TableRow key={employee.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -488,9 +476,9 @@ export function EmployeeManagement() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {getRoleDisplayName(employee.role?.name) || 'Not assigned'}
-                        </Badge>
+                          <Badge variant="secondary" className="capitalize">
+                            {getRoleDisplayName(employee.role?.name || '') || 'Not assigned'}
+                          </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusBadge(employee.status)}>
@@ -716,7 +704,7 @@ export function EmployeeManagement() {
                                         </div>
                                         <div>
                                           <p className="font-medium">Role:</p>
-                                          <p className="text-muted-foreground capitalize">{getRoleDisplayName(selectedEmployee.role?.name) || 'Not assigned'}</p>
+                                          <p className="text-muted-foreground capitalize">{getRoleDisplayName(selectedEmployee.role?.name || '') || 'Not assigned'}</p>
                                         </div>
                                         <div>
                                           <p className="font-medium">Manager:</p>
@@ -824,27 +812,27 @@ export function EmployeeManagement() {
                             <Edit className="h-4 w-4" />
                           </Button>
                           
+                          <Button 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEmployeeForAccess(employee);
+                              setIsAccessDialogOpen(true);
+                            }}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </Button>
+                          
                           <Dialog open={isAccessDialogOpen} onOpenChange={setIsAccessDialogOpen}>
-                            <DialogTrigger asChild>
-                              <Button 
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedEmployeeForAccess(employee);
-                                }}
-                              >
-                                <Shield className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
                               <DialogHeader>
-                                <DialogTitle>Manage Dashboard Access</DialogTitle>
+                                <DialogTitle>Manage Access Permissions</DialogTitle>
                                 <DialogDescription>
-                                  Configure dashboard permissions for {selectedEmployeeForAccess?.full_name}
+                                  Configure dashboard and feature-level access permissions for {selectedEmployeeForAccess?.full_name}
                                 </DialogDescription>
                               </DialogHeader>
                               {selectedEmployeeForAccess && (
                                 <DashboardAccessManager
-                                  employee={selectedEmployeeForAccess}
+                                  employee={selectedEmployeeForAccess as any}
                                   onClose={() => {
                                     setIsAccessDialogOpen(false);
                                     setSelectedEmployeeForAccess(null);

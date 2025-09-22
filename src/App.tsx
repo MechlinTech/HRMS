@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginForm } from '@/components/auth/LoginForm';
+import { RouteGuard } from '@/components/auth/RouteGuard';
 import { Toaster } from 'sonner';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
@@ -11,6 +12,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 const DashboardOverview = lazy(() => import('@/pages/dashboard/DashboardOverview').then(m => ({ default: m.DashboardOverview })));
 const LeaveApplication = lazy(() => import('@/pages/dashboard/LeaveApplication').then(m => ({ default: m.LeaveApplication })));
 const Documents = lazy(() => import('@/pages/dashboard/Documents').then(m => ({ default: m.Documents })));
+const Assets = lazy(() => import('@/pages/dashboard/Assets').then(m => ({ default: m.Assets })));
 const Complaints = lazy(() => import('@/pages/dashboard/Complaints').then(m => ({ default: m.Complaints })));
 const Performance = lazy(() => import('@/pages/dashboard/Performance').then(m => ({ default: m.Performance })));
 const ReferSomeone = lazy(() => import('@/pages/dashboard/ReferSomeone').then(m => ({ default: m.ReferSomeone })));
@@ -67,6 +69,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Helper function to wrap routes with RouteGuard
+function GuardedRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteGuard>
+      <Suspense fallback={<LoadingSpinner size="lg" />}>
+        {children}
+      </Suspense>
+    </RouteGuard>
+  );
+}
+
 function AppRoutes() {
   const { user } = useAuth();
 
@@ -85,79 +98,84 @@ function AppRoutes() {
         }
       >
         <Route path="dashboard" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <DashboardOverview />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="dashboard/leave" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <LeaveApplication />
-          </Suspense>
+          </GuardedRoute>
         } />
-        <Route path="dashboard/documents" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+        <Route path="dashboard/assets" element={
+          <GuardedRoute>
+            <Assets />
+          </GuardedRoute>
+        } />
+        {/* <Route path="dashboard/documents" element={
+          <GuardedRoute>
             <Documents />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="dashboard/complaints" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <Complaints />
-          </Suspense>
+          </GuardedRoute>
         } /> 
         <Route path="dashboard/performance" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <Performance />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="dashboard/referrals" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <ReferSomeone />
-          </Suspense>
-        } />
+          </GuardedRoute>
+        } /> */}
         <Route path="dashboard/settings" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <Settings />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <EmployeeManagement />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/*" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <EmployeeManagement />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/assets" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <AssetManagement />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/leave" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <LeaveManagement />
-          </Suspense>
+          </GuardedRoute>
         } />
-        <Route path="employees/referrals" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+        {/* <Route path="employees/referrals" element={
+          <GuardedRoute>
             <ReferralDashboard />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/exit" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <ExitProcess />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/attendance" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <AttendanceReports />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="employees/projects" element={
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <GuardedRoute>
             <ProjectManagement />
-          </Suspense>
+          </GuardedRoute>
         } />
         <Route path="grievance" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
@@ -223,7 +241,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <PayrollLogs />
           </Suspense>
-        } />
+        } /> 
         <Route path="ats" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ATSDashboard />
@@ -273,13 +291,13 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <AllCandidates />
           </Suspense>
-        } />
+        } /> */}
         <Route path="notifications" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <NotificationsPage />
           </Suspense>
         } />
-        <Route path="exit" element={
+        {/* <Route path="exit" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ExitDashboard />
           </Suspense>
@@ -303,7 +321,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ExitInterview />
           </Suspense>
-        } />
+        } />  */}
         <Route path="" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from 'react';
 import { useAllLeaveApplications, useUpdateLeaveApplicationStatus, useLeaveApplicationPermissions } from '@/hooks/useLeaveManagement';
 import { useWithdrawLeaveApplication } from '@/hooks/useLeave';
 import { useAllEmployeesLeaveBalances, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
 import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
+import { useRecalculateAllApprovedLeaveBalances } from '@/hooks/useSandwichLeave';
+import { useHolidays, useCreateHoliday, useDeleteHoliday } from '@/hooks/useHolidays';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,32 +18,31 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
 import {
   Calendar,
-  Search,
   Filter,
   Eye,
   CheckCircle,
   XCircle,
   Clock,
   AlertTriangle,
-  User,
   Download,
   Mail,
-  Phone,
   Plus,
   Minus,
   TrendingUp,
   Calculator,
   History,
   Info,
-  RotateCcw
+  RotateCcw,
+  CalendarPlus,
+  Trash2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { cn } from '@/lib/utils';
 import { isPastDate } from '@/utils/dateUtils';
+import { toast } from 'sonner';
 
 // Helper functions
 const getStatusIcon = (status: string) => {
@@ -74,7 +75,7 @@ const getStatusBadge = (status: string) => {
 
 // Component for handling action buttons based on permissions
 function LeaveApplicationActions({ application }: { application: any }) {
-  const { data: permissions, isLoading: permissionsLoading } = useLeaveApplicationPermissions(application.user?.id);
+  const { data: permissions } = useLeaveApplicationPermissions(application.user?.id);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState('');
@@ -158,7 +159,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
               </div>
               <div>
                 <p className="font-medium">Duration:</p>
-                <p className="text-muted-foreground">{application.days_count} days</p>
+                <p className="text-muted-foreground">
+                  {application.days_count} days
+                  {application.is_half_day && (
+                    <span className="ml-2 text-blue-600">
+                      ({application.half_day_period === '1st_half' ? '1st half' : 
+                        application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                    </span>
+                  )}
+                </p>
               </div>
               <div>
                 <p className="font-medium">Start Date:</p>
@@ -174,6 +183,20 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   {application.status}
                 </Badge>
               </div>
+              {application.approved_at && (
+                <div>
+                  <p className="font-medium">Reviewed At:</p>
+                  <p className="text-muted-foreground">
+                    {format(new Date(application.approved_at), 'MMM dd yyyy, HH:mm')}
+                  </p>
+                </div>
+              )}
+              {application.approved_by_user && (
+                <div>
+                  <p className="font-medium">Reviewed By:</p>
+                  <p className="text-muted-foreground">{application.approved_by_user.full_name}</p>
+                </div>
+              )}
             </div>
             <div>
               <p className="font-medium mb-2">Reason:</p>
@@ -185,6 +208,65 @@ function LeaveApplicationActions({ application }: { application: any }) {
                 <p className="text-muted-foreground text-sm">{application.comments}</p>
               </div>
             )}
+                            {(application.is_sandwich_leave || application.sandwich_deducted_days) && (
+                              <div className="border-t pt-4">
+                                <p className="font-medium mb-2 text-orange-700">Leave Deduction Calculation:</p>
+                                <div className={cn(
+                                  "p-3 rounded-lg space-y-2",
+                                  application.is_sandwich_leave ? "bg-orange-50" : "bg-blue-50"
+                                )}>
+                                  <div className="flex justify-between text-sm">
+                                    <span>Actual Working Days:</span>
+                                    <span className="font-medium">{application.days_count}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span>Days Deducted from Balance:</span>
+                                    <span className={cn(
+                                      "font-medium",
+                                      application.is_sandwich_leave ? "text-orange-700" : "text-blue-700"
+                                    )}>
+                                      {application.sandwich_deducted_days || application.days_count}
+                                    </span>
+                                  </div>
+                                  {application.sandwich_deducted_days && application.sandwich_deducted_days !== application.days_count && (
+                                    <div className="flex justify-between text-sm">
+                                      <span>Additional Deduction:</span>
+                                      <span className="font-medium text-red-600">
+                                        +{(application.sandwich_deducted_days - application.days_count).toFixed(1)} days
+                                      </span>
+                                    </div>
+                                  )}
+                                  {application.sandwich_reason && (
+                                    <div className="text-sm">
+                                      <span className="font-medium">Calculation Rule:</span>
+                                      <p className="text-muted-foreground mt-1">{application.sandwich_reason}</p>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {application.is_sandwich_leave && (
+                                      <Badge className="bg-orange-100 text-orange-800 text-xs">
+                                        Sandwich Leave Applied
+                                      </Badge>
+                                    )}
+                                    {!application.is_sandwich_leave && application.sandwich_deducted_days && (
+                                      <Badge className="bg-blue-100 text-blue-800 text-xs">
+                                        Enhanced Calculation
+                                      </Badge>
+                                    )}
+                                    {application.sandwich_deducted_days === 1 && (
+                                      <Badge className="bg-green-100 text-green-800 text-xs">
+                                        Single Day Approved
+                                      </Badge>
+                                    )}
+                                    {application.sandwich_deducted_days === 3 && application.days_count === 1 && (
+                                      <Badge className="bg-red-100 text-red-800 text-xs">
+                                        Sandwich Penalty
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -213,7 +295,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   </div>
                   <div>
                     <span className="font-medium">Duration:</span>
-                    <span className="ml-2">{application.days_count} days</span>
+                    <span className="ml-2">
+                      {application.days_count} days
+                      {application.is_half_day && (
+                        <span className="ml-2 text-blue-600 text-xs">
+                          ({application.half_day_period === '1st_half' ? '1st half' : 
+                            application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium">Start Date:</span>
@@ -302,7 +392,15 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   </div>
                   <div>
                     <span className="font-medium">Duration:</span>
-                    <span className="ml-2">{application.days_count} days</span>
+                    <span className="ml-2">
+                      {application.days_count} days
+                      {application.is_half_day && (
+                        <span className="ml-2 text-blue-600 text-xs">
+                          ({application.half_day_period === '1st_half' ? '1st half' : 
+                            application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium">Current Status:</span>
@@ -466,7 +564,6 @@ function LeaveBalanceAdjustment({ employee, onClose }: { employee: any; onClose:
 }
 
 export function LeaveManagement() {
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('applications');
   
   // Leave Applications data
@@ -479,15 +576,33 @@ export function LeaveManagement() {
   // Withdrawal logs data
   const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();
   
+  // Recalculation mutation
+  const recalculateBalances = useRecalculateAllApprovedLeaveBalances();
+  
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('');
+  const [sandwichFilter, setSandwichFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   
   // Dialog states
   const [selectedEmployeeForAdjustment, setSelectedEmployeeForAdjustment] = useState<any>(null);
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
+  
+  // Holiday states
+  const [holidayYear, setHolidayYear] = useState(2025);
+  const [isAddHolidayDialogOpen, setIsAddHolidayDialogOpen] = useState(false);
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayIsOptional, setNewHolidayIsOptional] = useState(false);
+
+  // Holiday data (after holidayYear state is defined)
+  const { data: holidays, isLoading: holidaysLoading } = useHolidays(holidayYear);
+  const createHoliday = useCreateHoliday();
+  const deleteHoliday = useDeleteHoliday();
 
   // Filter leave applications
   const filteredApplications = leaveApplications?.filter(application => {
@@ -497,7 +612,18 @@ export function LeaveManagement() {
     const matchesStatus = !statusFilter || statusFilter === 'all' || application.status === statusFilter;
     const matchesType = !typeFilter || typeFilter === 'all' || application.leave_type?.name === typeFilter;
     
-    return matchesSearch && matchesStatus && matchesType;
+    // Sandwich filter
+    const matchesSandwich = !sandwichFilter || sandwichFilter === 'all' ||
+      (sandwichFilter === 'sandwich' && application.is_sandwich_leave) ||
+      (sandwichFilter === 'standard' && !application.is_sandwich_leave);
+    
+    // Date filter
+    const applicationDate = new Date(application.start_date);
+    const matchesStartDate = !startDate || applicationDate >= new Date(startDate);
+    const matchesEndDate = !endDate || applicationDate <= new Date(endDate);
+    const matchesDate = matchesStartDate && matchesEndDate;
+    
+    return matchesSearch && matchesStatus && matchesType && matchesSandwich && matchesDate;
   });
 
   // Filter leave balances
@@ -523,7 +649,7 @@ export function LeaveManagement() {
   const handleExportApplications = () => {
     if (!filteredApplications) return;
     
-    const headers = ['Employee Name', 'Employee ID', 'Email', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Reason', 'Status', 'Applied Date', 'Approved By', 'Comments'];
+    const headers = ['Employee Name', 'Employee ID', 'Email', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Reason', 'Status', 'Applied Date', 'Reviewed Date', 'Reviewed Time', 'Reviewed By', 'Comments'];
     const csvContent = [
       headers.join(','),
       ...filteredApplications.map(app => [
@@ -537,6 +663,8 @@ export function LeaveManagement() {
         `"${app.reason}"`,
         app.status,
         format(new Date(app.applied_at), 'yyyy-MM-dd'),
+        app.approved_at ? format(new Date(app.approved_at), 'yyyy-MM-dd') : '',
+        app.approved_at ? format(new Date(app.approved_at), 'HH:mm') : '',
         `"${app.approved_by_user?.full_name || ''}"`,
         `"${app.comments || ''}"`
       ].join(','))
@@ -583,6 +711,23 @@ export function LeaveManagement() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleAddHoliday = () => {
+    if (!newHolidayName.trim() || !newHolidayDate) return;
+
+    createHoliday.mutate({
+      name: newHolidayName.trim(),
+      date: newHolidayDate,
+      is_optional: newHolidayIsOptional
+    }, {
+      onSuccess: () => {
+        setIsAddHolidayDialogOpen(false);
+        setNewHolidayName('');
+        setNewHolidayDate('');
+        setNewHolidayIsOptional(false);
+      }
+    });
+  };
+
   // Calculate stats
   const totalApplications = leaveApplications?.length || 0;
   const pendingApplications = leaveApplications?.filter(app => app.status === 'pending').length || 0;
@@ -613,21 +758,54 @@ export function LeaveManagement() {
             Manage employee leave applications and leave balances
           </p>
         </div>
-        <Button 
-          onClick={activeTab === 'applications' ? handleExportApplications : handleExportBalances} 
-          variant="outline"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export {activeTab === 'applications' ? 'Applications' : 'Balances'}
-        </Button>
+        <div className="flex gap-2">
+          {/* <Button 
+            onClick={() => recalculateBalances.mutate(undefined, {
+              onSuccess: (result) => {
+                toast.success(`✅ ${result}`, {
+                  duration: 5000,
+                });
+                // Refetch data to show updated balances
+                window.location.reload();
+              },
+              onError: (error) => {
+                toast.error(`Failed to recalculate balances: ${error.message}`);
+              }
+            })}
+            variant="outline"
+            disabled={recalculateBalances.isPending}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Calculator className="h-4 w-4 mr-2" />
+            {recalculateBalances.isPending ? 'Recalculating...' : 'Recalculate Balances'}
+          </Button> */}
+          <Button 
+            onClick={activeTab === 'applications' ? handleExportApplications : handleExportBalances} 
+            variant="outline"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export {activeTab === 'applications' ? 'Applications' : 'Balances'}
+          </Button>
+        </div>
       </div>
 
+      {/* Enhanced Sandwich Leave System Info */}
+      <Alert className="bg-blue-50 border-blue-200">
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+          <strong>Enhanced Sandwich Leave System Active:</strong> Leave balances are automatically calculated using sandwich leave rules. 
+          Friday/Monday patterns, holiday exclusions, and approval-based deductions are now enforced. 
+          Use "Recalculate Balances" to update existing approved applications with correct calculations.
+        </AlertDescription>
+      </Alert>
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="applications">Leave Applications</TabsTrigger>
           <TabsTrigger value="balances">Leave Balances</TabsTrigger>
           <TabsTrigger value="history">Adjustment History</TabsTrigger>
           <TabsTrigger value="withdrawals">Withdrawal Logs</TabsTrigger>
+          <TabsTrigger value="holidays">Holidays</TabsTrigger>
         </TabsList>
 
         <TabsContent value="applications" className="space-y-6">
@@ -694,17 +872,20 @@ export function LeaveManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
                 <div>
+                <Label htmlFor="filter-user-name" className='mb-2 ml-2'>Employee Name</Label>
                   <Input
+                    id='filter-user-name'
                     placeholder="Search employees..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
                 <div>
+                <Label htmlFor="status-filter" className='mb-2'>Application Status</Label>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger >
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
@@ -718,8 +899,9 @@ export function LeaveManagement() {
                   </Select>
                 </div>
                 <div>
+                <Label htmlFor="type-filter" className='mb-2'>Leave Type</Label>
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger >
                       <SelectValue placeholder="All Leave Types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -734,12 +916,46 @@ export function LeaveManagement() {
                   </Select>
                 </div>
                 <div>
+                <Label htmlFor="sandwich-filter" className='mb-2'>Sandwich Status</Label>
+                  <Select value={sandwichFilter} onValueChange={setSandwichFilter}>
+                    <SelectTrigger >
+                      <SelectValue placeholder="Sandwich Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="sandwich">Sandwich Leave</SelectItem>
+                      <SelectItem value="standard">Standard Leave</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                <Label htmlFor="start-date-filter" className='mb-2'>Start Date</Label>
+                  <Input
+                    type="date"
+                    placeholder="Start Date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                <Label htmlFor="end-date-filter" className='mb-2'>End Date</Label>
+                  <Input
+                    type="date"
+                    placeholder="End Date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+                <div className='mt-6'>
                   <Button 
                     variant="outline" 
                     onClick={() => {
                       setSearchTerm('');
                       setStatusFilter('');
                       setTypeFilter('');
+                      setSandwichFilter('');
+                      setStartDate('');
+                      setEndDate('');
                     }}
                   >
                     Clear Filters
@@ -770,9 +986,11 @@ export function LeaveManagement() {
                       <TableHead>Leave Type</TableHead>
                       <TableHead>Duration</TableHead>
                       <TableHead>Dates</TableHead>
+                      <TableHead>Sandwich Status</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Applied</TableHead>
+                      <TableHead>Reviewed</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -801,7 +1019,16 @@ export function LeaveManagement() {
                           <TableCell>
                             <div className="text-center">
                               <div className="font-medium">{application.days_count}</div>
-                              <div className="text-xs text-muted-foreground">days</div>
+                              <div className="text-xs text-muted-foreground">
+                                {application.is_half_day ? (
+                                  <span className="text-blue-600">
+                                    {application.half_day_period === '1st_half' ? '1st half' : 
+                                     application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'}
+                                  </span>
+                                ) : (
+                                  'days'
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -809,6 +1036,17 @@ export function LeaveManagement() {
                               <div>{format(new Date(application.start_date), 'MMM dd')}</div>
                               <div className="text-muted-foreground">to {format(new Date(application.end_date), 'MMM dd, yyyy')}</div>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {application.is_sandwich_leave ? (
+                              <Badge className="bg-orange-100 text-orange-800 text-xs">
+                                Sandwich
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-gray-600">
+                                Standard
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -837,6 +1075,18 @@ export function LeaveManagement() {
                           </TableCell>
                           <TableCell>{format(new Date(application.applied_at), 'MMM dd, yyyy')}</TableCell>
                           <TableCell>
+                            {application.approved_at ? (
+                              <div className="text-sm">
+                                <div>{format(new Date(application.approved_at), 'MMM dd, yyyy')}</div>
+                                <div className="text-muted-foreground text-xs">
+                                  {format(new Date(application.approved_at), 'HH:mm')}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <LeaveApplicationActions application={application} />
                           </TableCell>
                         </TableRow>
@@ -851,7 +1101,7 @@ export function LeaveManagement() {
                   <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No Leave Applications Found</h3>
                   <p className="text-muted-foreground">
-                    {searchTerm || statusFilter || typeFilter
+                    {searchTerm || statusFilter || typeFilter || sandwichFilter || startDate || endDate
                       ? 'No applications match your current filters.'
                       : 'No leave applications have been submitted yet.'}
                   </p>
@@ -916,6 +1166,7 @@ export function LeaveManagement() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
+                  <Label htmlFor="employee-name-filter" className='mb-2 ml-2'>Employee Name</Label>
                   <Input
                     placeholder="Search employees..."
                     value={searchTerm}
@@ -923,8 +1174,9 @@ export function LeaveManagement() {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="balance-filter" className='mb-2'>Balance Status</Label>
                   <Select value={balanceFilter} onValueChange={setBalanceFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger >
                       <SelectValue placeholder="All Balances" />
                     </SelectTrigger>
                     <SelectContent>
@@ -936,7 +1188,7 @@ export function LeaveManagement() {
                   </Select>
                 </div>
                 <div></div>
-                <div>
+                <div className='mt-4'>
                   <Button 
                     variant="outline" 
                     onClick={() => {
@@ -970,7 +1222,7 @@ export function LeaveManagement() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Tenure</TableHead>
-                      <TableHead>Monthly Rate</TableHead>
+                      {/* <TableHead>Monthly Rate</TableHead> */}
                       <TableHead>Allocated</TableHead>
                       <TableHead>Used</TableHead>
                       <TableHead>Remaining</TableHead>
@@ -1242,7 +1494,15 @@ export function LeaveManagement() {
                               <Badge variant="outline">
                                 {log.leave_application?.leave_type?.name}
                               </Badge>
-                              <span className="text-sm">{log.leave_application?.days_count} days</span>
+                              <span className="text-sm">
+                                {log.leave_application?.days_count} days
+                                {log.leave_application?.is_half_day && (
+                                  <span className="ml-1 text-blue-600 text-xs">
+                                    ({log.leave_application?.half_day_period === '1st_half' ? '1st half' : 
+                                      log.leave_application?.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'})
+                                  </span>
+                                )}
+                              </span>
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(log.leave_application?.start_date), 'MMM dd')} - {format(new Date(log.leave_application?.end_date), 'MMM dd, yyyy')}
@@ -1278,6 +1538,201 @@ export function LeaveManagement() {
                   <h3 className="text-lg font-semibold mb-2">No Withdrawal Logs</h3>
                   <p className="text-muted-foreground">
                     No leave applications have been withdrawn yet.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="holidays" className="space-y-6">
+          {/* Holiday Management */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarPlus className="h-5 w-5" />
+                    Holiday Management
+                  </CardTitle>
+                  <CardDescription>
+                    Manage company holidays and optional holidays for leave calculations
+                  </CardDescription>
+                </div>
+                <Dialog open={isAddHolidayDialogOpen} onOpenChange={setIsAddHolidayDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Holiday
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Holiday</DialogTitle>
+                      <DialogDescription>
+                        Create a new holiday entry for the company calendar
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="holiday-name">Holiday Name</Label>
+                        <Input
+                          id="holiday-name"
+                          placeholder="e.g., Diwali, Christmas, Independence Day"
+                          value={newHolidayName}
+                          onChange={(e) => setNewHolidayName(e.target.value)}
+                          className='mt-2'
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="holiday-date">Holiday Date</Label>
+                        <Input
+                          id="holiday-date"
+                          type="date"
+                          value={newHolidayDate}
+                          onChange={(e) => setNewHolidayDate(e.target.value)}
+                          className='mt-2'
+                        />
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="holiday-optional"
+                          checked={newHolidayIsOptional}
+                          onCheckedChange={(checked) => setNewHolidayIsOptional(checked === true)}
+                        />
+                        <Label htmlFor="holiday-optional">Optional Holiday</Label>
+                        <div className="text-xs text-muted-foreground ml-2">
+                          (Won't affect sandwich leave calculations)
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setIsAddHolidayDialogOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={handleAddHoliday}
+                          disabled={!newHolidayName.trim() || !newHolidayDate || createHoliday.isPending}
+                        >
+                          {createHoliday.isPending ? 'Adding...' : 'Add Holiday'}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Year Filter */}
+              <div className="mb-6">
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="year-filter" className="text-sm font-medium">Filter by Year:</Label>
+                  <Input
+                    id="year-filter"
+                    type="number"
+                    value={holidayYear}
+                    onChange={(e) => {
+                      const year = parseInt(e.target.value);
+                      if (!isNaN(year) && year >= 1900 && year <= 2100) {
+                        setHolidayYear(year);
+                      }
+                    }}
+                    placeholder="Enter year (e.g., 2024)"
+                    className="w-48"
+                    min="1900"
+                    max="2100"
+                  />
+                  <div className="flex gap-2">
+                    {[-1, 0, 1].map((offset) => {
+                      const year = new Date().getFullYear() + offset;
+                      return (
+                        <Button
+                          key={year}
+                          variant={holidayYear === year ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setHolidayYear(year)}
+                        >
+                          {year}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Holidays Table */}
+              {holidaysLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : holidays && holidays.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Holiday Name</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {holidays.map((holiday: any) => {
+                      const holidayDate = new Date(holiday.date);
+                      const dayName = holidayDate.toLocaleDateString('en-US', { weekday: 'long' });
+                      
+                      return (
+                        <TableRow key={holiday.id}>
+                          <TableCell>
+                            <div className="font-medium">{holiday.name}</div>
+                          </TableCell>
+                          <TableCell>
+                            {format(holidayDate, 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{dayName}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {holiday.is_optional ? (
+                              <Badge className="bg-blue-100 text-blue-800">
+                                Optional
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-800">
+                                Mandatory
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (holiday.id) {
+                                  deleteHoliday.mutate(holiday.id);
+                                } else {
+                                  toast.error('Holiday ID is missing');
+                                }
+                              }}
+                              disabled={deleteHoliday.isPending}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8">
+                  <CalendarPlus className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Holidays Found</h3>
+                  <p className="text-muted-foreground">
+                    No holidays have been added for {holidayYear}. Add holidays to help with accurate leave calculations.
                   </p>
                 </div>
               )}

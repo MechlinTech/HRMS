@@ -4,6 +4,8 @@ export const msalConfig = {
     auth: {
         clientId: 'cabdbfaf-b291-4927-b676-6d96f3c189c3',
         authority: 'https://login.microsoftonline.com/85707f27-830a-4b92-aa8c-3830bfb6c6f5/',
+        // redirectUri: 'https://mechlin-hrms-duplica-zoat.bolt.host/',
+        // postLogoutRedirectUri: 'https://mechlin-hrms-duplica-zoat.bolt.host/',
         redirectUri: 'https://hrms.mechlintech.com/',
         postLogoutRedirectUri: 'https://hrms.mechlintech.com/',
         navigateToLoginRequestUrl: false,

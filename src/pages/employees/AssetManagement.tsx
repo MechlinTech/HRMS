@@ -94,6 +94,8 @@ import {
   exportAssetsToPDF,
   exportVMsToExcel,
   exportVMsToPDF,
+  exportComplaintsToExcel,
+  exportComplaintsToPDF,
   applyFilters
 } from '@/utils/exportUtils';
 import { useUserStatuses } from '@/hooks/useUserStatuses';
@@ -470,6 +472,7 @@ export function AssetManagement() {
       purchase_cost: 0,
       location: '',
       condition: 'good',
+      status: 'available',
       notes: '',
       invoice_copy_link: '',
       warranty_document_link: '',
@@ -1166,6 +1169,16 @@ export function AssetManagement() {
       exportVMsToExcel(filteredVMs, vmFilters);
     } else {
       exportVMsToPDF(filteredVMs, vmFilters);
+    }
+  };
+
+  const handleExportComplaints = (format: 'excel' | 'pdf') => {
+    if (!complaintsData) return;
+    
+    if (format === 'excel') {
+      exportComplaintsToExcel(filteredComplaints, complaintFilters);
+    } else {
+      exportComplaintsToPDF(filteredComplaints, complaintFilters);
     }
   };
 
@@ -2125,6 +2138,32 @@ export function AssetManagement() {
                               <SelectItem value="fair">Fair</SelectItem>
                               <SelectItem value="poor">Poor</SelectItem>
                               <SelectItem value="damaged">Damaged</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={assetForm.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="available">Available</SelectItem>
+                              <SelectItem value="assigned">Assigned</SelectItem>
+                              <SelectItem value="maintenance">Maintenance</SelectItem>
+                              <SelectItem value="retired">Retired</SelectItem>
+                              <SelectItem value="lost">Lost</SelectItem>
+                              <SelectItem value="archived">Archived</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -3924,13 +3963,18 @@ export function AssetManagement() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // Export complaints logic
-                      console.log('Export complaints');
-                    }}
+                    onClick={() => handleExportComplaints('excel')}
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Export
+                    Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExportComplaints('pdf')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    PDF
                   </Button>
                 </div>
               </div>
@@ -6575,7 +6619,7 @@ export function AssetManagement() {
               </div>
 
               {/* Approval/Rejection Details */}
-              {(selectedAssetRequest.approved_by_user || selectedAssetRequest.rejected_by_user) && (
+              {(selectedAssetRequest.approved_by_user || selectedAssetRequest.rejected_by_user) && selectedAssetRequest.status !== 'fulfilled' && (
                 <div>
                   <h4 className="font-semibold text-base mb-3 text-primary">
                     {selectedAssetRequest.status === 'approved' ? 'Approval' : 'Rejection'} Details
@@ -6729,17 +6773,22 @@ export function AssetManagement() {
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger >
-                                <SelectValue placeholder="Choose an available asset" />
+                                <SelectValue placeholder="Choose an asset" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {availableAssets?.filter(asset => 
-                                asset.category?.name === selectedAssetRequest.category?.name
+                              {assets?.filter(asset => 
+                                asset.status !== 'archived'
                               ).map((asset) => (
                                 <SelectItem key={asset.id} value={asset.id}>
                                   <div className="flex items-center gap-2">
                                     {React.createElement(getAssetIcon(asset.category?.name || ''), { className: "h-4 w-4" })}
-                                    <span>{asset.name} ({asset.asset_tag})</span>
+                                    <div className="flex flex-col">
+                                      <span>{asset.name} ({asset.asset_tag})</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {asset.category?.name} • [{asset.status}]
+                                      </span>
+                                    </div>
                                   </div>
                                 </SelectItem>
                               ))}

@@ -326,7 +326,7 @@ export function LoginForm() {
             </Button> */}
           </div>
           
-          <div className="relative">
+{/*           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -374,7 +374,7 @@ export function LoginForm() {
             >
               Don't have an account? Sign up
             </Button>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

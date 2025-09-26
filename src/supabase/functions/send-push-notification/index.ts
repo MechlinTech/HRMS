@@ -115,6 +115,10 @@ function getNotificationUrl(type: string, data: Record<string, any>): string {
     case 'document_approved':
     case 'document_rejected':
       return '/dashboard/documents'
+    case 'document_request':
+      return data?.target && data?.tab ? `/${data.target}?tab=${data.tab}` : '/dashboard/documents'
+    case 'document_upload':
+      return data?.target || '/employees'
     case 'asset_request_submitted':
       // For managers/admin who can approve/monitor
       return data?.target || '/employees/asset-management'

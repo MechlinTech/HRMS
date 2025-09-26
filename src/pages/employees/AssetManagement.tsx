@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEmployeePermissions } from '@/hooks/useEmployeePermissions';
 import { 
   useAssets, 
   useAssetAssignments, 
@@ -216,6 +217,7 @@ type AssetRequestActionFormData = z.infer<typeof assetRequestActionSchema>;
 
 export function AssetManagement() {
   const { user } = useAuth();
+  const permissions = useEmployeePermissions();
   const { data: assets } = useAssets();
   const { data: assignments, isLoading: assignmentsLoading } = useAssetAssignments();
   const { data: allAssignments } = useAllAssetAssignments(); // New: includes all assignments (active + returned)
@@ -241,48 +243,64 @@ export function AssetManagement() {
   const backfillAssignmentLogs = useBackfillAssignmentLogs();
   const { data: allComplaints } = useAllAssetComplaints();
   const updateComplaint = useUpdateAssetComplaint();
-  // Determine if user is a department manager
-  const isManager = user?.role?.name && ['sdm', 'bdm', 'qam', 'hrm'].includes(user.role.name);
-  const isHRAdmin = user?.role?.name && ['hr', 'admin', 'super_admin'].includes(user.role.name) || user?.isSA;
-
-  // Debug logging
-  // console.log('AssetManagement - User Role Debug:', {
-  //   userRole: user?.role?.name,
-  //   isManager,
-  //   isHRAdmin,
-  //   userIsSA: user?.isSA
-  // });
-
-  // Use conditional hooks based on user role
+  // Use conditional hooks based on user permissions
   const { data: allAssetRequests } = useAllAssetRequests();
   const { data: managerAssetRequests } = useManagerAssetRequests(); 
   const { data: managerComplaints } = useManagerAssetComplaints();
   const updateAssetRequest = useUpdateAssetRequest();
 
-  // Choose the appropriate data source based on user role
-  // For managers (BDM, SDM, QAM, HRM): use ONLY manager-specific data
+  // Choose the appropriate data source based on user permissions
+  // For managers: use ONLY manager-specific data
   // For HR/Admin: use all data
-  const assetRequestsData = isHRAdmin ? allAssetRequests : managerAssetRequests;
+  const assetRequestsData = permissions.canViewAllEmployees ? allAssetRequests : managerAssetRequests;
   
   // Debug: Log the actual data being used
   console.log('AssetManagement - Final Data Debug:', {
     userRole: user?.role?.name,
-    isHRAdmin,
-    isManager,
+    accessLevel: permissions.accessLevel,
+    canViewAllEmployees: permissions.canViewAllEmployees,
     finalAssetRequestsData: assetRequestsData,
     finalAssetRequestsCount: assetRequestsData?.length || 0
   });
-  // Use all assignments data (which includes user status and both active/inactive assignments)
-  const assignmentsData = allAssignments;
-  const complaintsData = isHRAdmin ? allComplaints : managerComplaints;
+  // Filter employees based on permissions
+  const filteredEmployees = permissions.canViewAllEmployees 
+    ? employees 
+    : employees?.filter(emp => emp.manager_id === user?.id);
+
+  // Filter assignments data based on permissions
+  const assignmentsData = permissions.canViewAllEmployees 
+    ? allAssignments 
+    : allAssignments?.filter(assignment => assignment.user?.manager_id === user?.id);
+  
+  // Filter assets based on permissions - managers should see:
+  // 1. Assets assigned to their team members
+  // 2. Available assets (for potential assignment)
+  const roleBasedFilteredAssets = permissions.canViewAllEmployees 
+    ? assets 
+    : assets?.filter(asset => {
+        // Always show available assets
+        if (!asset.current_assignment || asset.current_assignment.length === 0) {
+          return true;
+        }
+        // Show assets assigned to team members
+        return asset.current_assignment?.some(assignment => 
+          assignment.user?.manager_id === user?.id
+        );
+      });
+  
+  const complaintsData = permissions.canViewAllEmployees ? allComplaints : managerComplaints;
 
   // Debug logging for data selection
   console.log('AssetManagement - Data Selection Debug:', {
-    isHRAdmin,
+    canViewAllEmployees: permissions.canViewAllEmployees,
     allAssetRequestsCount: allAssetRequests?.length || 0,
     managerAssetRequestsCount: managerAssetRequests?.length || 0,
     selectedDataCount: assetRequestsData?.length || 0,
-    selectedDataSource: isHRAdmin ? 'allAssetRequests' : 'managerAssetRequests'
+    selectedDataSource: permissions.canViewAllEmployees ? 'allAssetRequests' : 'managerAssetRequests',
+    allAssignmentsCount: allAssignments?.length || 0,
+    filteredAssignmentsCount: assignmentsData?.length || 0,
+    allAssetsCount: assets?.length || 0,
+    filteredAssetsCount: roleBasedFilteredAssets?.length || 0
   });
   
   // For VM data, we'll need to fetch directly from the API
@@ -377,11 +395,11 @@ export function AssetManagement() {
   
   try {
     filteredAssignments = assignmentsData ? applyFilters(assignmentsData, assignmentFilters) : [];
-    // Apply filters to assets - exclude archived by default unless specifically filtering for them
-    let assetsToFilter = assets;
+    // Apply filters to assets - use role-based filtered assets as starting point
+    let assetsToFilter = roleBasedFilteredAssets; // Use role-based filtered assets
     if (assetFilters.status === 'all') {
       // When no specific status is selected, exclude archived assets
-      assetsToFilter = assets ? assets.filter(asset => asset.status !== 'archived') : [];
+      assetsToFilter = roleBasedFilteredAssets ? roleBasedFilteredAssets.filter(asset => asset.status !== 'archived') : [];
     }
     filteredAssets = assetsToFilter ? applyFilters(assetsToFilter, assetFilters) : [];
     filteredVMs = vmData ? applyFilters(vmData, vmFilters) : [];
@@ -1271,13 +1289,31 @@ export function AssetManagement() {
     );
   }
   
+  // Check if user has permission to access asset management
+  if (!permissions.canManageAssets) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="text-center">
+          <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-medium mb-2">Access Restricted</h3>
+          <p className="text-muted-foreground">
+            You don't have permission to access Asset Management.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Asset Management</h1>
           <p className="text-muted-foreground">
-            Track and manage company assets and assignments
+            {permissions.accessLevel === 'all' 
+              ? 'Track and manage company assets and assignments'
+              : 'Track and manage assets for your team members'
+            }
           </p>
         </div>
         <div className="flex gap-2">
@@ -2008,12 +2044,14 @@ export function AssetManagement() {
               }
             }}
           >
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Asset
-              </Button>
-            </DialogTrigger>
+            {permissions.canViewAllEmployees && (
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Asset
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create New Asset</DialogTitle>
@@ -2516,12 +2554,14 @@ export function AssetManagement() {
               }
             }}
           >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Assign Asset
-              </Button>
-            </DialogTrigger>
+            {(permissions.canViewAllEmployees || permissions.canViewTeamEmployees) && (
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Assign Asset
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Assign Asset to Employee</DialogTitle>
@@ -2579,7 +2619,7 @@ export function AssetManagement() {
                         <FormLabel>Employees * (Multi-select)</FormLabel>
                         <div className="space-y-2">
                           <div className="max-h-40 overflow-y-auto border rounded-md p-2">
-                            {employees?.map((employee: any) => (
+                            {filteredEmployees?.map((employee: any) => (
                               <div key={employee.id} className="flex items-center space-x-2 p-1">
                                 <input
                                   type="checkbox"
@@ -3194,13 +3234,16 @@ export function AssetManagement() {
                           </DialogContent>
                         </Dialog>
                         
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleEditAssignment(assignment)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {(permissions.canEditAllEmployees || 
+                          (permissions.canEditTeamEmployees && assignment.user?.manager_id === user?.id)) && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleEditAssignment(assignment)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
                         
                         <Button 
                           size="sm" 
@@ -3256,9 +3299,14 @@ export function AssetManagement() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>All Assets</CardTitle>
+                      <CardTitle>
+                        {permissions.canViewAllEmployees ? 'All Assets' : 'Team Assets'}
+                      </CardTitle>
                       <CardDescription>
-                        Complete inventory of all company assets (excluding Virtual Machines)
+                        {permissions.canViewAllEmployees 
+                          ? 'Complete inventory of all company assets (excluding Virtual Machines)'
+                          : 'Assets assigned to your team members and available assets (excluding Virtual Machines)'
+                        }
                       </CardDescription>
                     </div>
                     <div className="flex gap-2">
@@ -3736,14 +3784,14 @@ export function AssetManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {assets?.filter(asset => asset.status === 'archived').length === 0 ? (
+                    {roleBasedFilteredAssets?.filter(asset => asset.status === 'archived').length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           No archived assets found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      assets?.filter(asset => asset.status === 'archived').map((asset) => (
+                      roleBasedFilteredAssets?.filter(asset => asset.status === 'archived').map((asset) => (
                         <TableRow key={asset.id}>
                           <TableCell className="font-medium">{asset.asset_tag}</TableCell>
                           <TableCell>
@@ -5203,7 +5251,7 @@ export function AssetManagement() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {employees?.map((employee: any) => (
+                        {filteredEmployees?.map((employee: any) => (
                           <SelectItem key={employee.id} value={employee.id}>
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6">
@@ -6777,7 +6825,7 @@ export function AssetManagement() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {assets?.filter(asset => 
+                              {roleBasedFilteredAssets?.filter(asset => 
                                 asset.status !== 'archived'
                               ).map((asset) => (
                                 <SelectItem key={asset.id} value={asset.id}>

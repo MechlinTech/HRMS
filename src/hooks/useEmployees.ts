@@ -3,11 +3,66 @@ import { employeeApi, assetApi, vmApi, hrReferralsApi, hrExitApi } from '@/servi
 import { authApi } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { supabase } from '@/services/supabase';
 
 export function useAllEmployees() {
   return useQuery({
     queryKey: ['all-employees'],
     queryFn: employeeApi.getAllEmployees,
+  });
+}
+
+// Hook for getting employees based on user permissions
+export function useFilteredEmployees() {
+  const { user } = useAuth();
+  
+  return useQuery({
+    queryKey: ['filtered-employees', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+
+      const roleName = user.role?.name || user.role_id || '';
+      const isAdmin = user.isSA || roleName === 'admin' || roleName === 'super_admin';
+      const isHR = roleName === 'hr' || roleName === 'hrm';
+      const isManager = ['sdm', 'bdm', 'qam', 'hrm', 'manager'].includes(roleName);
+
+      // Admin and HR can see all employees
+      if (isAdmin || isHR) {
+        return employeeApi.getAllEmployees();
+      }
+
+      // Managers can only see their team members
+      if (isManager) {
+        const { data, error } = await supabase
+          .from('users')
+          .select(`
+            *,
+            department:departments!users_department_id_fkey(id, name),
+            role:roles(id, name)
+          `)
+          .eq('manager_id', user.id)
+          .eq('status', 'active')
+          .order('full_name');
+
+        if (error) throw error;
+        return data || [];
+      }
+
+      // Regular employees can only see themselves
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          department:departments!users_department_id_fkey(id, name),
+          role:roles(id, name)
+        `)
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      return data ? [data] : [];
+    },
+    enabled: !!user?.id,
   });
 }
 
@@ -477,8 +532,17 @@ export function useUpdateEmployee() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) =>
       authApi.updateProfile(id, updates),
-    onSuccess: () => {
+    onSuccess: (updatedEmployee, { id }) => {
+      // Invalidate all relevant query keys to ensure immediate UI updates
       queryClient.invalidateQueries({ queryKey: ['all-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['filtered-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee', id] });
+      
+      // Also invalidate any queries that might depend on employee data
+      queryClient.invalidateQueries({ queryKey: ['document-types', id] });
+      queryClient.invalidateQueries({ queryKey: ['employee-documents', id] });
+      queryClient.invalidateQueries({ queryKey: ['work-experience', id] });
+      
       toast.success('Employee updated successfully!');
     },
     onError: (error) => {

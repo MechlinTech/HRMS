@@ -12,6 +12,15 @@ export function useAllEmployeesLeaveBalances(year?: number) {
   });
 }
 
+// Hook to get all employees' leave balances with manager information for role-based filtering
+export function useAllEmployeesLeaveBalancesWithManager(year?: number) {
+  return useQuery({
+    queryKey: ['all-employees-leave-balances-with-manager', year],
+    queryFn: () => leaveApi.getAllEmployeesLeaveBalancesWithManager(year),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
 // Hook to manually update a leave balance
 export function useUpdateLeaveBalance() {
   const queryClient = useQueryClient();

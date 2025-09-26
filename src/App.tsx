@@ -15,6 +15,7 @@ const Documents = lazy(() => import('@/pages/dashboard/Documents').then(m => ({ 
 const Assets = lazy(() => import('@/pages/dashboard/Assets').then(m => ({ default: m.Assets })));
 const Complaints = lazy(() => import('@/pages/dashboard/Complaints').then(m => ({ default: m.Complaints })));
 const Performance = lazy(() => import('@/pages/dashboard/Performance').then(m => ({ default: m.Performance })));
+const KRA = lazy(() => import('@/pages/performance/KRA').then(m => ({ default: m.KRA })));
 const ReferSomeone = lazy(() => import('@/pages/dashboard/ReferSomeone').then(m => ({ default: m.ReferSomeone })));
 const Settings = lazy(() => import('@/pages/dashboard/Settings').then(m => ({ default: m.Settings })));
 const EmployeeManagement = lazy(() => import('@/pages/employees/EmployeeManagement').then(m => ({ default: m.EmployeeManagement })));
@@ -112,12 +113,12 @@ function AppRoutes() {
             <Assets />
           </GuardedRoute>
         } />
-        {/* <Route path="dashboard/documents" element={
+        <Route path="dashboard/documents" element={
           <GuardedRoute>
             <Documents />
           </GuardedRoute>
         } />
-        <Route path="dashboard/complaints" element={
+        {/* <Route path="dashboard/complaints" element={
           <GuardedRoute>
             <Complaints />
           </GuardedRoute>
@@ -125,6 +126,11 @@ function AppRoutes() {
         <Route path="dashboard/performance" element={
           <GuardedRoute>
             <Performance />
+          </GuardedRoute>
+        } />
+        <Route path="performance/kra" element={
+          <GuardedRoute>
+            <KRA />
           </GuardedRoute>
         } />
         <Route path="dashboard/referrals" element={
@@ -321,7 +327,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ExitInterview />
           </Suspense>
-        } />  */}
+        } /> */}
         <Route path="" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

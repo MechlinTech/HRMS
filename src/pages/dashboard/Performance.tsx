@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from 'react';
 import { 
   usePerformanceGoals, 
-  useUpdateGoalProgress,
   usePerformanceEvaluations,
   usePerformanceAppraisals,
   usePerformanceFeedback 
@@ -16,10 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   Target,
-  TrendingUp,
   Award,
   MessageCircle,
-  Calendar,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -29,29 +25,18 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { MyKRAView } from '@/components/kra/MyKRAView';
+import { useMyKRAAssignments } from '@/hooks/useKRA';
 
 export function Performance() {
-  const { user } = useAuth();
   const { data: performanceGoals, isLoading: goalsLoading } = usePerformanceGoals();
   const { data: evaluations, isLoading: evaluationsLoading } = usePerformanceEvaluations();
   const { data: appraisals, isLoading: appraisalsLoading } = usePerformanceAppraisals();
   const { data: feedback, isLoading: feedbackLoading } = usePerformanceFeedback();
-  const updateGoalProgress = useUpdateGoalProgress();
+  const { data: myKRAAssignments, isLoading: kraLoading } = useMyKRAAssignments();
   
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'in_progress':
-        return <Clock className="h-4 w-4 text-blue-600" />;
-      case 'not_started':
-        return <AlertCircle className="h-4 w-4 text-gray-600" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-600" />;
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     const variants = {
@@ -155,11 +140,12 @@ export function Performance() {
       </div>
 
       <Tabs defaultValue="goals" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="appraisals">Appraisals</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
+          <TabsTrigger value="kra">KRA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="goals" className="space-y-6">
@@ -487,6 +473,13 @@ export function Performance() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="kra" className="space-y-6">
+          <MyKRAView 
+            assignments={myKRAAssignments || []} 
+            isLoading={kraLoading}
+          />
         </TabsContent>
       </Tabs>
     </div>

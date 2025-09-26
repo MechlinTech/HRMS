@@ -60,7 +60,7 @@ export const DASHBOARD_CONFIG = [
       { id: 'overview', name: 'Overview', slug: 'overview', path: '/dashboard', icon: 'Home' },
       { id: 'leave', name: 'Leave Application', slug: 'leave', path: '/dashboard/leave', icon: 'Calendar' },
       { id: 'assets', name: 'My Assets', slug: 'assets', path: '/dashboard/assets', icon: 'Package' },
-      // { id: 'documents', name: 'Documents', slug: 'documents', path: '/dashboard/documents', icon: 'FileText' },
+      { id: 'documents', name: 'Documents', slug: 'documents', path: '/dashboard/documents', icon: 'FileText' },
       // { id: 'complaints', name: 'Complaints', slug: 'complaints', path: '/dashboard/complaints', icon: 'MessageSquare' },
       // { id: 'performance', name: 'Performance', slug: 'performance', path: '/dashboard/performance', icon: 'Target' },
       // { id: 'referrals', name: 'Refer Someone', slug: 'referrals', path: '/dashboard/referrals', icon: 'UserPlus' },
@@ -92,10 +92,12 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'Target',
   //   color: 'purple',
   //   pages: [
-  //     // { id: 'overview', name: 'Performance Overview', slug: 'overview', path: '/performance', icon: 'Target' },
-  //     // { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
-  //     // { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
-  //     // { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
+  //     { id: 'overview', name: 'Performance Overview', slug: 'overview', path: '/performance', icon: 'Target' },
+  //     { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
+  //     { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
+  //     { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
+  //     { id: 'KRA', name: 'KRA', slug: 'kra', path: '/performance/kra', icon: 'SquareChartGantt' },
+  //     { id: 'appraisals', name: 'Appraisals', slug: 'appraisals', path: '/performance/appraisals', icon: 'BanknoteArrowUp' },
   //   ],
   // },
   // {
@@ -106,8 +108,8 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'AlertTriangle',
   //   color: 'red',
   //   pages: [
-  //     // { id: 'overview', name: 'Grievance Dashboard', slug: 'overview', path: '/grievance', icon: 'AlertTriangle' },
-  //     // { id: 'all', name: 'All Complaints', slug: 'all', path: '/grievance/all', icon: 'List' },
+  //     { id: 'overview', name: 'Grievance Dashboard', slug: 'overview', path: '/grievance', icon: 'AlertTriangle' },
+  //     { id: 'all', name: 'All Complaints', slug: 'all', path: '/grievance/all', icon: 'List' },
   //   ],
   // },
   // {
@@ -118,10 +120,10 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'TrendingUp',
   //   color: 'indigo',
   //   pages: [
-  //     // { id: 'overview', name: 'BD Dashboard', slug: 'overview', path: '/bd', icon: 'TrendingUp' },
-  //     // { id: 'billing', name: 'All Billings', slug: 'billing', path: '/bd/billing', icon: 'Receipt' },
-  //     // { id: 'invoices', name: 'All Invoices', slug: 'invoices', path: '/bd/invoices', icon: 'FileText' },
-  //     // { id: 'logs', name: 'Billing Logs', slug: 'logs', path: '/bd/logs', icon: 'History' },
+  //     { id: 'overview', name: 'BD Dashboard', slug: 'overview', path: '/bd', icon: 'TrendingUp' },
+  //     { id: 'billing', name: 'All Billings', slug: 'billing', path: '/bd/billing', icon: 'Receipt' },
+  //     { id: 'invoices', name: 'All Invoices', slug: 'invoices', path: '/bd/invoices', icon: 'FileText' },
+  //     { id: 'logs', name: 'Billing Logs', slug: 'logs', path: '/bd/logs', icon: 'History' },
   //   ],
   // },
   // {
@@ -132,10 +134,10 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'DollarSign',
   //   color: 'emerald',
   //   pages: [
-  //     // { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
-  //     // { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
-  //     // { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
-  //     // { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
+  //     { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
+  //     { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
+  //     { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
+  //     { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
   //   ],
   // },
   // {
@@ -146,10 +148,10 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'UserCheck',
   //   color: 'cyan',
   //   pages: [
-  //     // { id: 'overview', name: 'ATS Dashboard', slug: 'overview', path: '/ats', icon: 'UserCheck' },
-  //     // { id: 'candidates', name: 'Candidates List', slug: 'candidates', path: '/ats/candidates', icon: 'Users' },
-  //     // { id: 'assessment', name: 'Recruitment Assessment', slug: 'assessment', path: '/ats/assessment', icon: 'Code' },
-  //     // { id: 'questions', name: 'Question Bank', slug: 'questions', path: '/ats/questions', icon: 'HelpCircle' },
+  //     { id: 'overview', name: 'ATS Dashboard', slug: 'overview', path: '/ats', icon: 'UserCheck' },
+  //     { id: 'candidates', name: 'Candidates List', slug: 'candidates', path: '/ats/candidates', icon: 'Users' },
+  //     { id: 'assessment', name: 'Recruitment Assessment', slug: 'assessment', path: '/ats/assessment', icon: 'Code' },
+  //     { id: 'questions', name: 'Question Bank', slug: 'questions', path: '/ats/questions', icon: 'HelpCircle' },
   //   ],
   // },
   // {
@@ -160,10 +162,10 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'GraduationCap',
   //   color: 'violet',
   //   pages: [
-  //     // { id: 'overview', name: 'LMS Dashboard', slug: 'overview', path: '/lms', icon: 'GraduationCap' },
-  //     // { id: 'prerequisites', name: 'Prerequisites', slug: 'prerequisites', path: '/lms/prerequisites', icon: 'BookOpen' },
-  //     // { id: 'documents', name: 'Document Upload', slug: 'documents', path: '/lms/documents', icon: 'Upload' },
-  //     // { id: 'candidates', name: 'All Candidates', slug: 'candidates', path: '/lms/candidates', icon: 'Users' },
+  //     { id: 'overview', name: 'LMS Dashboard', slug: 'overview', path: '/lms', icon: 'GraduationCap' },
+  //     { id: 'prerequisites', name: 'Prerequisites', slug: 'prerequisites', path: '/lms/prerequisites', icon: 'BookOpen' },
+  //     { id: 'documents', name: 'Document Upload', slug: 'documents', path: '/lms/documents', icon: 'Upload' },
+  //     { id: 'candidates', name: 'All Candidates', slug: 'candidates', path: '/lms/candidates', icon: 'Users' },
   //   ],
   // },
   // {
@@ -174,10 +176,10 @@ export const DASHBOARD_CONFIG = [
   //   icon: 'LogOut',
   //   color: 'gray',
   //   pages: [
-  //     // { id: 'overview', name: 'Exit Dashboard', slug: 'overview', path: '/exit', icon: 'LogOut' },
-  //     // { id: 'documents', name: 'Exit Documents', slug: 'documents', path: '/exit/documents', icon: 'FileText' },
-  //     // { id: 'clearance', name: 'Exit Clearance', slug: 'clearance', path: '/exit/clearance', icon: 'ClipboardCheck' },
-  //     // { id: 'interview', name: 'Exit Interview', slug: 'interview', path: '/exit/interview', icon: 'MessageSquare' },
+  //     { id: 'overview', name: 'Exit Dashboard', slug: 'overview', path: '/exit', icon: 'LogOut' },
+  //     { id: 'documents', name: 'Exit Documents', slug: 'documents', path: '/exit/documents', icon: 'FileText' },
+  //     { id: 'clearance', name: 'Exit Clearance', slug: 'clearance', path: '/exit/clearance', icon: 'ClipboardCheck' },
+  //     { id: 'interview', name: 'Exit Interview', slug: 'interview', path: '/exit/interview', icon: 'MessageSquare' },
   //   ],
   // },
 ];

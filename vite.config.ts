@@ -28,7 +28,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   optimizeDeps: {
-    include: ['react', 'react-dom/client', "xlsx", "file-saver", "jspdf", "jspdf-autotable", "recharts", "@radix-ui/react-tooltip"]
+    include: ['react', 'react-dom/client', "xlsx", "file-saver", "jspdf", "jspdf-autotable", "recharts", "@radix-ui/react-tooltip", "jszip"]
   },
   resolve: {
     alias: {

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useAllLeaveApplications, useUpdateLeaveApplicationStatus, useLeaveApplicationPermissions } from '@/hooks/useLeaveManagement';
 import { useWithdrawLeaveApplication } from '@/hooks/useLeave';
-import { useAllEmployeesLeaveBalances, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
+import { useAllEmployeesLeaveBalances, useAllEmployeesLeaveBalancesWithManager, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
 import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
 import { useRecalculateAllApprovedLeaveBalances } from '@/hooks/useSandwichLeave';
 import { useHolidays, useCreateHoliday, useDeleteHoliday } from '@/hooks/useHolidays';
+import { useEmployeePermissions } from '@/hooks/useEmployeePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -564,17 +566,36 @@ function LeaveBalanceAdjustment({ employee, onClose }: { employee: any; onClose:
 }
 
 export function LeaveManagement() {
+  const { user } = useAuth();
+  const permissions = useEmployeePermissions();
   const [activeTab, setActiveTab] = useState('applications');
   
   // Leave Applications data
   const { data: leaveApplications, isLoading: applicationsLoading } = useAllLeaveApplications();
   
   // Leave Balances data
-  const { data: leaveBalances, isLoading: balancesLoading } = useAllEmployeesLeaveBalances();
+  const { data: leaveBalances, isLoading: balancesLoading } = useAllEmployeesLeaveBalancesWithManager();
   const { data: adjustmentHistory, isLoading: historyLoading } = useLeaveBalanceAdjustments(undefined, 100);
   
   // Withdrawal logs data
   const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();
+
+  // Filter data based on permissions
+  const filteredLeaveBalances = permissions.canViewAllEmployees 
+    ? leaveBalances 
+    : leaveBalances?.filter(balance => balance.user?.manager_id === user?.id);
+
+  const filteredAdjustmentHistory = permissions.canViewAllEmployees 
+    ? adjustmentHistory 
+    : adjustmentHistory?.filter(adj => adj.user?.manager_id === user?.id);
+
+  const filteredWithdrawalLogs = permissions.canViewAllEmployees 
+    ? withdrawalLogs 
+    : withdrawalLogs?.filter(log => log.leave_application?.user?.manager_id === user?.id);
+
+  const filteredLeaveApplications = permissions.canViewAllEmployees 
+    ? leaveApplications 
+    : leaveApplications?.filter(app => app.user?.manager_id === user?.id);
   
   // Recalculation mutation
   const recalculateBalances = useRecalculateAllApprovedLeaveBalances();
@@ -605,7 +626,7 @@ export function LeaveManagement() {
   const deleteHoliday = useDeleteHoliday();
 
   // Filter leave applications
-  const filteredApplications = leaveApplications?.filter(application => {
+  const filteredApplications = filteredLeaveApplications?.filter(application => {
     const matchesSearch = application.user?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          application.user?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          application.user?.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -627,7 +648,7 @@ export function LeaveManagement() {
   });
 
   // Filter leave balances
-  const filteredBalances = leaveBalances?.filter(balance => {
+  const filteredBalances = filteredLeaveBalances?.filter(balance => {
     const matchesSearch = balance.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          balance.employee_id?.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -729,17 +750,32 @@ export function LeaveManagement() {
   };
 
   // Calculate stats
-  const totalApplications = leaveApplications?.length || 0;
-  const pendingApplications = leaveApplications?.filter(app => app.status === 'pending').length || 0;
-  const approvedApplications = leaveApplications?.filter(app => app.status === 'approved').length || 0;
-  const urgentApplications = leaveApplications?.filter(app => getPriorityLevel(app) === 'urgent').length || 0;
+  const totalApplications = filteredLeaveApplications?.length || 0;
+  const pendingApplications = filteredLeaveApplications?.filter(app => app.status === 'pending').length || 0;
+  const approvedApplications = filteredLeaveApplications?.filter(app => app.status === 'approved').length || 0;
+  const urgentApplications = filteredLeaveApplications?.filter(app => getPriorityLevel(app) === 'urgent').length || 0;
 
-  const totalEmployees = leaveBalances?.length || 0;
-  const negativeBalances = leaveBalances?.filter(balance => (balance.remaining_days || 0) < 0).length || 0;
-  const zeroBalances = leaveBalances?.filter(balance => (balance.remaining_days || 0) === 0).length || 0;
+  const totalEmployees = filteredLeaveBalances?.length || 0;
+  const negativeBalances = filteredLeaveBalances?.filter(balance => (balance.remaining_days || 0) < 0).length || 0;
+  const zeroBalances = filteredLeaveBalances?.filter(balance => (balance.remaining_days || 0) === 0).length || 0;
   const averageBalance = totalEmployees > 0 
-    ? (leaveBalances?.reduce((sum, balance) => sum + (balance.remaining_days || 0), 0) || 0) / totalEmployees 
+    ? (filteredLeaveBalances?.reduce((sum, balance) => sum + (balance.remaining_days || 0), 0) || 0) / totalEmployees 
     : 0;
+
+  // Check if user has permission to access leave management
+  if (!permissions.canViewAllEmployees && !permissions.canViewTeamEmployees) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="text-center">
+          <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-medium mb-2">Access Restricted</h3>
+          <p className="text-muted-foreground">
+            You don't have permission to access Leave Management.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (applicationsLoading && balancesLoading) {
     return (
@@ -755,7 +791,10 @@ export function LeaveManagement() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Leave Management</h1>
           <p className="text-muted-foreground">
-            Manage employee leave applications and leave balances
+            {permissions.accessLevel === 'all' 
+              ? 'Manage employee leave applications and leave balances'
+              : 'Manage leave applications and balances for your team members'
+            }
           </p>
         </div>
         <div className="flex gap-2">
@@ -800,12 +839,14 @@ export function LeaveManagement() {
       </Alert>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className={`grid w-full ${permissions.canViewAllEmployees ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <TabsTrigger value="applications">Leave Applications</TabsTrigger>
           <TabsTrigger value="balances">Leave Balances</TabsTrigger>
           <TabsTrigger value="history">Adjustment History</TabsTrigger>
           <TabsTrigger value="withdrawals">Withdrawal Logs</TabsTrigger>
-          <TabsTrigger value="holidays">Holidays</TabsTrigger>
+          {permissions.canViewAllEmployees && (
+            <TabsTrigger value="holidays">Holidays</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="applications" className="space-y-6">
@@ -1206,9 +1247,14 @@ export function LeaveManagement() {
           {/* Leave Balances Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Employee Leave Balances</CardTitle>
+              <CardTitle>
+                {permissions.accessLevel === 'all' ? 'Employee Leave Balances' : 'Team Leave Balances'}
+              </CardTitle>
               <CardDescription>
-                View and manage leave balances for all employees
+                {permissions.accessLevel === 'all' 
+                  ? 'View and manage leave balances for all employees'
+                  : 'View and manage leave balances for your team members'
+                }
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1232,8 +1278,16 @@ export function LeaveManagement() {
                   </TableHeader>
                   <TableBody>
                     {filteredBalances?.map((balance) => {
-                      const remainingDays = balance.remaining_days || 0;
-                      const tenureMonths = balance.tenure_months || 0;
+                      // Data validation and cleanup
+                      const allocatedDays = Number(balance.allocated_days) || 0;
+                      const usedDays = Number(balance.used_days) || 0;
+                      const remainingDays = Number(balance.remaining_days) || 0;
+                      const tenureMonths = Number(balance.tenure_months) || 0;
+                      const monthlyRate = Number(balance.monthly_rate) || 0;
+                      
+                      // Calculate actual remaining if data seems inconsistent
+                      const calculatedRemaining = allocatedDays - usedDays;
+                      const displayRemaining = Math.abs(remainingDays - calculatedRemaining) > 0.1 ? calculatedRemaining : remainingDays;
                       
                       return (
                         <TableRow key={balance.user_id}>
@@ -1243,58 +1297,58 @@ export function LeaveManagement() {
                                 <AvatarFallback>{balance.full_name?.charAt(0) || 'U'}</AvatarFallback>
                               </Avatar>
                               <div>
-                                <div className="font-medium">{balance.full_name}</div>
+                                <div className="font-medium">{balance.full_name || 'Unknown'}</div>
                                 <div className="text-sm text-muted-foreground">
-                                  ID: {balance.employee_id}
+                                  ID: {balance.employee_id || 'N/A'}
                                 </div>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-center">
-                              <div className="font-medium">{tenureMonths}</div>
-                              <div className="text-xs text-muted-foreground">months</div>
-                            </div>
+                          <TableCell className="text-center">
+                            <div className="font-medium">{tenureMonths}</div>
+                            <div className="text-xs text-muted-foreground">months</div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-center">
-                              <div className="font-medium">{balance.monthly_rate || 0}</div>
-                              <div className="text-xs text-muted-foreground">days/month</div>
-                            </div>
+                          {/* <TableCell className="text-center">
+                            <div className="font-medium">{monthlyRate.toFixed(1)}</div>
+                            <div className="text-xs text-muted-foreground">days/month</div>
+                          </TableCell> */}
+                          <TableCell className="text-center">
+                            <div className="font-medium">{allocatedDays}</div>
+                            <div className="text-xs text-muted-foreground">allocated</div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-center">
-                              <div className="font-medium">{balance.allocated_days || 0}</div>
-                              <div className="text-xs text-muted-foreground">allocated</div>
-                            </div>
+                          <TableCell className="text-center">
+                            <div className="font-medium">{usedDays.toFixed(1)}</div>
+                            <div className="text-xs text-muted-foreground">used</div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-center">
-                              <div className="font-medium">{balance.used_days || 0}</div>
-                              <div className="text-xs text-muted-foreground">used</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <div className={cn(
-                              "text-center font-medium",
-                              remainingDays < 0 ? "text-red-600" : 
-                              remainingDays === 0 ? "text-orange-600" : "text-green-600"
+                              "font-medium",
+                              displayRemaining < 0 ? "text-red-600" : 
+                              displayRemaining === 0 ? "text-orange-600" : "text-green-600"
                             )}>
-                              <div>{remainingDays}</div>
+                              <div>{displayRemaining.toFixed(1)}</div>
                               <div className="text-xs text-muted-foreground">remaining</div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">
-                              {balance.can_carry_forward && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Can Carry Forward
+                              {allocatedDays === 0 ? (
+                                <Badge variant="outline" className="text-xs text-gray-600">
+                                  No Allocation
                                 </Badge>
-                              )}
-                              {tenureMonths < 9 && (
-                                <Badge variant="outline" className="text-xs text-orange-600">
-                                  Salary Deduction
-                                </Badge>
+                              ) : (
+                                <>
+                                  {balance.can_carry_forward && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Can Carry Forward
+                                    </Badge>
+                                  )}
+                                  {tenureMonths < 9 && (
+                                    <Badge variant="outline" className="text-xs text-orange-600">
+                                      Salary Deduction
+                                    </Badge>
+                                  )}
+                                </>
                               )}
                               {balance.is_anniversary_today && (
                                 <Badge variant="destructive" className="text-xs">
@@ -1304,26 +1358,27 @@ export function LeaveManagement() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Dialog 
-                              open={isAdjustmentDialogOpen && selectedEmployeeForAdjustment?.user_id === balance.user_id}
-                              onOpenChange={(open) => {
-                                setIsAdjustmentDialogOpen(open);
-                                if (!open) setSelectedEmployeeForAdjustment(null);
-                              }}
-                            >
-                              <DialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedEmployeeForAdjustment(balance);
-                                    setIsAdjustmentDialogOpen(true);
-                                  }}
-                                >
-                                  <Calculator className="h-4 w-4 mr-2" />
-                                  Adjust
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
+                            {permissions.canEditAllEmployees && (
+                              <Dialog 
+                                open={isAdjustmentDialogOpen && selectedEmployeeForAdjustment?.user_id === balance.user_id}
+                                onOpenChange={(open) => {
+                                  setIsAdjustmentDialogOpen(open);
+                                  if (!open) setSelectedEmployeeForAdjustment(null);
+                                }}
+                              >
+                                <DialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedEmployeeForAdjustment(balance);
+                                      setIsAdjustmentDialogOpen(true);
+                                    }}
+                                  >
+                                    <Calculator className="h-4 w-4 mr-2" />
+                                    Adjust
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
                                 <DialogHeader>
                                   <DialogTitle>Adjust Leave Balance</DialogTitle>
                                   <DialogDescription>
@@ -1338,7 +1393,8 @@ export function LeaveManagement() {
                                   }}
                                 />
                               </DialogContent>
-                            </Dialog>
+                              </Dialog>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -1371,7 +1427,10 @@ export function LeaveManagement() {
                 Leave Balance Adjustment History
               </CardTitle>
               <CardDescription>
-                Track all manual adjustments made to employee leave balances
+                {permissions.accessLevel === 'all' 
+                  ? 'Track all manual adjustments made to employee leave balances'
+                  : 'Track all manual adjustments made to your team members\' leave balances'
+                }
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1379,7 +1438,7 @@ export function LeaveManagement() {
                 <div className="flex items-center justify-center py-8">
                   <LoadingSpinner size="md" />
                 </div>
-              ) : adjustmentHistory && adjustmentHistory.length > 0 ? (
+              ) : filteredAdjustmentHistory && filteredAdjustmentHistory.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1392,7 +1451,7 @@ export function LeaveManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {adjustmentHistory.map((adjustment: any) => (
+                    {filteredAdjustmentHistory?.map((adjustment: any) => (
                       <TableRow key={adjustment.id}>
                         <TableCell>
                           <div className="font-medium">{adjustment.user?.full_name}</div>
@@ -1459,7 +1518,10 @@ export function LeaveManagement() {
                 Leave Withdrawal Logs
               </CardTitle>
               <CardDescription>
-                Track all leave applications that have been withdrawn by employees or administrators
+                {permissions.accessLevel === 'all' 
+                  ? 'Track all leave applications that have been withdrawn by employees or administrators'
+                  : 'Track leave applications withdrawn by your team members'
+                }
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1467,7 +1529,7 @@ export function LeaveManagement() {
                 <div className="flex items-center justify-center py-8">
                   <LoadingSpinner size="md" />
                 </div>
-              ) : withdrawalLogs && withdrawalLogs.length > 0 ? (
+              ) : filteredWithdrawalLogs && filteredWithdrawalLogs.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1480,7 +1542,7 @@ export function LeaveManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {withdrawalLogs.map((log: any) => (
+                    {filteredWithdrawalLogs?.map((log: any) => (
                       <TableRow key={log.id}>
                         <TableCell>
                           <div className="font-medium">{log.leave_application?.user?.full_name}</div>
@@ -1545,7 +1607,8 @@ export function LeaveManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="holidays" className="space-y-6">
+        {permissions.canViewAllEmployees && (
+          <TabsContent value="holidays" className="space-y-6">
           {/* Holiday Management */}
           <Card>
             <CardHeader>
@@ -1739,6 +1802,7 @@ export function LeaveManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -47,6 +47,11 @@ export const authApi = {
       'father_dob', 'mother_name', 'mother_dob', 'designation_offer_letter',
       'permanent_address', 'aadhar_card_no', 'pan_no', 'bank_account_no',
       'ifsc_code', 'qualification', 'employment_terms', 'date_of_joining',
+      // New onboarding fields
+      'appointment_formalities', 'orientation', 'order_id_card', 'email_account',
+      'skype_account', 'system_account', 'added_to_mailing_list', 
+      'added_to_attendance_sheet', 'confluence_info_provided', 'id_card_provided',
+      'remarks', 'uan_number', 'is_experienced',
       // System fields
       'isSA'
     ];
@@ -94,7 +99,9 @@ export const authApi = {
       'blood_group', 'religion', 'gender', 'marital_status', 
       'father_name', 'mother_name', 'designation_offer_letter',
       'permanent_address', 'aadhar_card_no', 'pan_no', 'bank_account_no',
-      'ifsc_code', 'qualification', 'employment_terms'
+      'ifsc_code', 'qualification', 'employment_terms',
+      // New onboarding fields (text fields)
+      'remarks', 'uan_number'
     ];
     optionalTextFields.forEach(field => {
       if (filteredUpdates[field] === '') {
@@ -102,12 +109,14 @@ export const authApi = {
       }
     });
 
+    const finalUpdates = {
+      ...filteredUpdates,
+      updated_at: new Date().toISOString()
+    };
+
     const { data, error } = await supabase
       .from('users')
-      .update({
-        ...filteredUpdates,
-        updated_at: new Date().toISOString()
-      })
+      .update(finalUpdates)
       .eq('id', userId)
       .select()
       .single();
@@ -170,6 +179,38 @@ export const leaveApi = {
     
     if (error) throw error;
     return data;
+  },
+
+  // Manager-specific function to get leave balances with manager information
+  async getAllEmployeesLeaveBalancesWithManager(year: number = new Date().getFullYear()) {
+    // First get leave balance data from RPC
+    const { data: balanceData, error: balanceError } = await supabase
+      .rpc('get_all_employees_leave_balances', { p_year: year });
+    
+    if (balanceError) throw balanceError;
+
+    // Then get user manager information
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, manager_id')
+      .in('id', balanceData?.map((b: any) => b.user_id) || []);
+
+    if (userError) throw userError;
+
+    // Merge the data
+    return balanceData?.map((balance: any) => {
+      const userInfo = userData?.find(u => u.id === balance.user_id);
+      return {
+        ...balance,
+        user: {
+          id: balance.user_id,
+          full_name: balance.full_name,
+          employee_id: balance.employee_id,
+          email: balance.email,
+          manager_id: userInfo?.manager_id
+        }
+      };
+    }) || [];
   },
 
   async updateLeaveBalance(balanceId: string, updates: {
@@ -253,7 +294,7 @@ export const leaveApi = {
       .from('leave_balance_adjustments')
       .select(`
         *,
-        user:users!user_id(full_name, employee_id, email),
+        user:users!user_id(full_name, employee_id, email, manager_id),
         adjusted_by_user:users!adjusted_by(full_name, email),
         leave_balance:leave_balances(
           leave_type:leave_types(name)
@@ -890,10 +931,25 @@ export const employeeApi = {
       aadhar_card_no: row.aadhar_card_no,
       pan_no: row.pan_no,
       personal_email: row.personal_email,
+      company_email: row.company_email,
       bank_account_no: row.bank_account_no,
       ifsc_code: row.ifsc_code,
       qualification: row.qualification,
       employment_terms: row.employment_terms,
+      // New onboarding fields
+      appointment_formalities: row.appointment_formalities,
+      orientation: row.orientation,
+      order_id_card: row.order_id_card,
+      email_account: row.email_account,
+      skype_account: row.skype_account,
+      system_account: row.system_account,
+      added_to_mailing_list: row.added_to_mailing_list,
+      added_to_attendance_sheet: row.added_to_attendance_sheet,
+      confluence_info_provided: row.confluence_info_provided,
+      id_card_provided: row.id_card_provided,
+      remarks: row.remarks,
+      uan_number: row.uan_number,
+      is_experienced: row.is_experienced,
       role: row.role_name ? {
         name: row.role_name,
         description: row.role_description
@@ -960,10 +1016,25 @@ export const employeeApi = {
       aadhar_card_no: row.aadhar_card_no,
       pan_no: row.pan_no,
       personal_email: row.personal_email,
+      company_email: row.company_email,
       bank_account_no: row.bank_account_no,
       ifsc_code: row.ifsc_code,
       qualification: row.qualification,
       employment_terms: row.employment_terms,
+      // New onboarding fields
+      appointment_formalities: row.appointment_formalities,
+      orientation: row.orientation,
+      order_id_card: row.order_id_card,
+      email_account: row.email_account,
+      skype_account: row.skype_account,
+      system_account: row.system_account,
+      added_to_mailing_list: row.added_to_mailing_list,
+      added_to_attendance_sheet: row.added_to_attendance_sheet,
+      confluence_info_provided: row.confluence_info_provided,
+      id_card_provided: row.id_card_provided,
+      remarks: row.remarks,
+      uan_number: row.uan_number,
+      is_experienced: row.is_experienced,
       role: row.role_name ? {
         name: row.role_name,
         description: row.role_description
@@ -1108,7 +1179,7 @@ export const assetApi = {
       .select(`
         *,
         asset:assets(name, asset_tag, brand, model, category:asset_categories(name, description), status),
-        user:users!user_id(full_name, employee_id),
+        user:users!user_id(full_name, employee_id, manager_id),
         assigned_by_user:users!assigned_by(full_name)
       `)
       .eq('is_active', true)
@@ -1514,7 +1585,7 @@ export const assetApi = {
       .select(`
         *,
         asset:assets(name, asset_tag, brand, model, status, category:asset_categories(name, description)),
-        user:users!user_id(full_name, employee_id, status, department:departments!users_department_id_fkey(name)),
+        user:users!user_id(full_name, employee_id, status, manager_id, department:departments!users_department_id_fkey(name)),
         assigned_by_user:users!assigned_by(full_name)
       `)
       .order('assigned_date', { ascending: false });

@@ -53,6 +53,7 @@ import {
   Building,
   UserCheck,
   DollarSign,
+  IndianRupee,
   FileText,
   Upload,
   Download,
@@ -1321,11 +1322,11 @@ function WorkInfoView({ employee, getStatusBadge }: { employee: Employee; getSta
       {employee.salary && (
         <div className="p-4 bg-green-50 rounded-lg mt-4">
           <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="h-4 w-4 text-green-600" />
+            <IndianRupee className="h-4 w-4 text-green-600" />
             <span className="font-medium">Salary Information</span>
           </div>
           <p className="text-2xl font-bold text-green-600">
-            ${employee.salary.toLocaleString()}
+            ₹ {employee.salary.toLocaleString()}
           </p>
           <p className="text-sm text-muted-foreground">Annual salary</p>
         </div>

@@ -96,6 +96,8 @@ INSERT INTO employee_document_types (name, is_mandatory, category, applicable_em
 ('Aadhaar Card', true, 'personal', NULL, NULL, NULL),
 ('PAN Card / PAN Details', true, 'personal', NULL, NULL, NULL),
 ('One Professional Photograph (plain white background)', true, 'personal', NULL, NULL, NULL),
+('Passport', false, 'personal', NULL, NULL, NULL),
+('Driving License', false, 'personal', NULL, NULL, NULL),
 
 -- Educational Documents
 ('10th Certificate', true, 'educational', NULL, NULL, NULL),

@@ -6,6 +6,7 @@ import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
 import { useRecalculateAllApprovedLeaveBalances } from '@/hooks/useSandwichLeave';
 import { useHolidays, useCreateHoliday, useDeleteHoliday } from '@/hooks/useHolidays';
 import { useEmployeePermissions } from '@/hooks/useEmployeePermissions';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -482,24 +483,43 @@ function LeaveApplicationActions({ application }: { application: any }) {
 }
 
 // Component for leave balance adjustment dialog
-function LeaveBalanceAdjustment({ employee, onClose }: { employee: any; onClose: () => void }) {
+function LeaveBalanceAdjustment({ employee, onClose, onSuccess }: { 
+  employee: any; 
+  onClose: () => void;
+  onSuccess?: () => void;
+}) {
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const adjustBalance = useAdjustLeaveBalance();
+  const queryClient = useQueryClient();
 
   const handleAdjustment = () => {
     if (!amount || !reason) return;
+    
+    const adjustmentAmount = parseFloat(amount);
+    if (isNaN(adjustmentAmount) || adjustmentAmount < 0.5) {
+      toast.error('Please enter a valid amount (minimum 0.5 days)');
+      return;
+    }
 
     adjustBalance.mutate({
       userId: employee.user_id,
       adjustment: {
         type: adjustmentType,
-        amount: parseInt(amount),
+        amount: parseFloat(amount),
         reason
       }
     }, {
       onSuccess: () => {
+        // Invalidate and refetch all relevant queries
+        queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+        queryClient.invalidateQueries({ queryKey: ['leave-balance-adjustments'] });
+        
+        // Call the success callback if provided
+        onSuccess?.();
+        
+        // Close the dialog and reset form
         onClose();
         setAmount('');
         setReason('');
@@ -536,7 +556,9 @@ function LeaveBalanceAdjustment({ employee, onClose }: { employee: any; onClose:
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="Enter number of days"
-          min="1"
+          step="0.5"
+          min="0.5"
+          pattern="\d*\.?\d*"
         />
       </div>
 
@@ -574,8 +596,8 @@ export function LeaveManagement() {
   const { data: leaveApplications, isLoading: applicationsLoading } = useAllLeaveApplications();
   
   // Leave Balances data
-  const { data: leaveBalances, isLoading: balancesLoading } = useAllEmployeesLeaveBalancesWithManager();
-  const { data: adjustmentHistory, isLoading: historyLoading } = useLeaveBalanceAdjustments(undefined, 100);
+  const { data: leaveBalances, isLoading: balancesLoading, refetch: refetchBalances } = useAllEmployeesLeaveBalancesWithManager();
+  const { data: adjustmentHistory, isLoading: historyLoading, refetch: refetchHistory } = useLeaveBalanceAdjustments(undefined, 100);
   
   // Withdrawal logs data
   const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();

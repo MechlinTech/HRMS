@@ -195,6 +195,8 @@ export class EmployeeDocumentService {
     { name: 'Aadhaar Card', is_mandatory: true, category: 'personal' },
     { name: 'PAN Card / PAN Details', is_mandatory: true, category: 'personal' },
     { name: 'One Professional Photograph (plain white background)', is_mandatory: true, category: 'personal' },
+    { name: 'Driving License', is_mandatory: false, category: 'personal' },
+    { name: 'Passport', is_mandatory: false, category: 'personal' },
 
     // Educational Documents
     { name: '10th Certificate', is_mandatory: true, category: 'educational' },

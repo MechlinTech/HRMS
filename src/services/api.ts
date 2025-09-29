@@ -214,8 +214,8 @@ export const leaveApi = {
   },
 
   async updateLeaveBalance(balanceId: string, updates: {
-    allocated_days?: number;
-    used_days?: number;
+    allocated_days?: number | string;
+    used_days?: number | string;
     comments?: string;
   }) {
     const { data, error } = await supabase
@@ -238,7 +238,7 @@ export const leaveApi = {
 
   async adjustLeaveBalance(userId: string, adjustment: {
     type: 'add' | 'subtract';
-    amount: number;
+    amount: number | string;
     reason: string;
     year?: number;
   }, currentUserId?: string) {
@@ -296,7 +296,7 @@ export const leaveApi = {
         *,
         user:users!user_id(full_name, employee_id, email, manager_id),
         adjusted_by_user:users!adjusted_by(full_name, email),
-        leave_balance:leave_balances(
+        leave_balance:leave_balances!leave_balance_adjustments_balance_id_fkey(
           leave_type:leave_types(name)
         )
       `)
@@ -313,7 +313,7 @@ export const leaveApi = {
     return data;
   },
 
-  async createLeaveBalanceForUser(userId: string, leaveTypeId: string, allocatedDays: number, year?: number) {
+  async createLeaveBalanceForUser(userId: string, leaveTypeId: string, allocatedDays: number | string, year?: number) {
     const balanceYear = year || new Date().getFullYear();
     
     const { data, error } = await supabase

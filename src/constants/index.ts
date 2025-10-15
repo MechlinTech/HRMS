@@ -63,8 +63,9 @@ export const DASHBOARD_CONFIG = [
       { id: 'documents', name: 'Documents', slug: 'documents', path: '/dashboard/documents', icon: 'FileText' },
       // { id: 'complaints', name: 'Complaints', slug: 'complaints', path: '/dashboard/complaints', icon: 'MessageSquare' },
       // { id: 'performance', name: 'Performance', slug: 'performance', path: '/dashboard/performance', icon: 'Target' },
+      { id: 'feedback', name: 'HRMS Feedback', slug: 'feedback', path: '/dashboard/feedback', icon: 'MessageSquare' },
       // { id: 'referrals', name: 'Refer Someone', slug: 'referrals', path: '/dashboard/referrals', icon: 'UserPlus' },
-      { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
+      // { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
     ],
   },
   {
@@ -82,6 +83,7 @@ export const DASHBOARD_CONFIG = [
       // { id: 'exit', name: 'Exit Process', slug: 'exit', path: '/employees/exit', icon: 'LogOut' },
       // { id: 'attendance', name: 'Attendance Reports', slug: 'attendance', path: '/employees/attendance', icon: 'Clock' },
       // { id: 'projects', name: 'Project Management', slug: 'projects', path: '/employees/projects', icon: 'Building' },
+      { id: 'feedback', name: 'HRMS Feedback', slug: 'feedback', path: '/employees/feedback', icon: 'MessageSquare' },
     ],
   },
   // {
@@ -93,11 +95,11 @@ export const DASHBOARD_CONFIG = [
   //   color: 'purple',
   //   pages: [
   //     { id: 'overview', name: 'Performance Overview', slug: 'overview', path: '/performance', icon: 'Target' },
-  //     { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
-  //     { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
-  //     { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
+  //     // { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
+  //     // { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
+  //     // { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
   //     { id: 'KRA', name: 'KRA', slug: 'kra', path: '/performance/kra', icon: 'SquareChartGantt' },
-  //     { id: 'appraisals', name: 'Appraisals', slug: 'appraisals', path: '/performance/appraisals', icon: 'BanknoteArrowUp' },
+  //     // { id: 'appraisals', name: 'Appraisals', slug: 'appraisals', path: '/performance/appraisals', icon: 'BanknoteArrowUp' },
   //   ],
   // },
   // {
@@ -224,10 +226,12 @@ export const ROLE_DASHBOARD_MAPPING = {
   [ROLES.FINANCE]: [
     DASHBOARDS.SELF,
     DASHBOARDS.FINANCE,
+    DASHBOARDS.EMPLOYEE_MANAGEMENT,
   ],
   [ROLES.FINANCE_MANAGER]: [
     DASHBOARDS.SELF,
     DASHBOARDS.FINANCE,
+    DASHBOARDS.EMPLOYEE_MANAGEMENT,
   ],
   [ROLES.EMPLOYEE]: [
     DASHBOARDS.SELF,

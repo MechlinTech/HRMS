@@ -13,16 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   UserPlus,
-  Upload,
   Gift,
   Clock,
   CheckCircle,
   XCircle,
-  DollarSign,
   Users,
-  TrendingUp
+  IndianRupee
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDateForDisplay } from '@/utils/dateUtils';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 const relationshipTypes = [
@@ -49,7 +47,6 @@ export function ReferSomeone() {
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [whyRecommend, setWhyRecommend] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // New fields
   const [linkedinProfile, setLinkedinProfile] = useState('');
@@ -73,32 +70,28 @@ export function ReferSomeone() {
       referred_by: user.id,
       candidate_name: candidateName.trim(),
       candidate_email: candidateEmail.trim(),
-      candidate_phone: candidatePhone.trim() || null,
+      candidate_phone: candidatePhone.trim() || undefined,
       position: position,
-      additional_info: additionalInfo.trim() || null,
+      additional_info: additionalInfo.trim() || undefined,
       relationship: relationship,
-      linkedin_profile: linkedinProfile.trim() || null,
-      current_company: currentCompany.trim() || null,
-      current_job_title: currentJobTitle.trim() || null,
-      total_experience_years: experienceYears ? parseInt(experienceYears) : null,
-      total_experience_months: experienceMonths ? parseInt(experienceMonths) : null,
-      current_ctc: currentCtc ? parseFloat(currentCtc) : null,
-      expected_ctc: expectedCtc ? parseFloat(expectedCtc) : null,
-      notice_period_availability: noticePeriod.trim() || null,
-      reason_for_change: reasonForChange.trim() || null,
-      key_skills: keySkills.trim() || null,
-      domain_expertise: domainExpertise.trim() || null,
+      linkedin_profile: linkedinProfile.trim() || undefined,
+      current_company: currentCompany.trim() || undefined,
+      current_job_title: currentJobTitle.trim() || undefined,
+      total_experience_years: experienceYears ? parseInt(experienceYears) : undefined,
+      total_experience_months: experienceMonths ? parseInt(experienceMonths) : undefined,
+      current_ctc: currentCtc ? parseFloat(currentCtc) : undefined,
+      expected_ctc: expectedCtc ? parseFloat(expectedCtc) : undefined,
+      notice_period_availability: noticePeriod.trim() || undefined,
+      reason_for_change: reasonForChange.trim() || undefined,
+      key_skills: keySkills.trim() || undefined,
+      domain_expertise: domainExpertise.trim() || undefined,
       location_preference: locationPreference as 'Mohali' | 'Kota',
-      status: 'submitted',
+      status: 'submitted' as const,
       bonus_eligible: true
     };
 
-    const mutation = resumeFile ? createReferralWithResume : createReferral;
-    const mutationData = resumeFile 
-      ? { referralData, resumeFile }
-      : referralData;
-
-    mutation.mutate(mutationData, {
+    if (resumeFile) {
+      createReferralWithResume.mutate({ referralData, resumeFile }, {
       onSuccess: () => {
         // Reset form
         setCandidateName('');
@@ -129,6 +122,39 @@ export function ReferSomeone() {
         }
       }
     });
+    } else {
+      createReferral.mutate(referralData, {
+        onSuccess: () => {
+          // Reset form
+          setCandidateName('');
+          setCandidateEmail('');
+          setCandidatePhone('');
+          setPosition('');
+          setRelationship('');
+          setAdditionalInfo('');
+          setWhyRecommend('');
+          setResumeFile(null);
+          // Reset new fields
+          setLinkedinProfile('');
+          setCurrentCompany('');
+          setCurrentJobTitle('');
+          setExperienceYears('');
+          setExperienceMonths('');
+          setCurrentCtc('');
+          setExpectedCtc('');
+          setNoticePeriod('');
+          setReasonForChange('');
+          setKeySkills('');
+          setDomainExpertise('');
+          setLocationPreference('Mohali');
+          // Clear file input
+          const fileInput = document.getElementById('resume') as HTMLInputElement;
+          if (fileInput) {
+            fileInput.value = '';
+          }
+        }
+      });
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -211,12 +237,12 @@ export function ReferSomeone() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
+              <IndianRupee className="h-4 w-4" />
               Bonus Earned
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalBonusEarned.toLocaleString()}</div>
+            <div className="text-2xl font-bold">₹{totalBonusEarned.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Total paid out</p>
           </CardContent>
         </Card>
@@ -229,7 +255,7 @@ export function ReferSomeone() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${pendingBonus.toLocaleString()}</div>
+            <div className="text-2xl font-bold">₹{pendingBonus.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">To be processed</p>
           </CardContent>
         </Card>
@@ -289,7 +315,7 @@ export function ReferSomeone() {
                           id="candidatePhone"
                           value={candidatePhone}
                           onChange={(e) => setCandidatePhone(e.target.value)}
-                          placeholder="+1 (555) 123-4567"
+                          placeholder="+91 1234567890"
                           className="mt-1"
                         />
                       </div>
@@ -313,10 +339,10 @@ export function ReferSomeone() {
                         type="file"
                         onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
                         className="mt-1"
-                        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                        accept=".pdf,.doc,.docx"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Supported formats: PDF, DOC, DOCX, TXT, JPEG, PNG (Max 10MB)
+                        Supported formats: PDF, DOC, DOCX
                       </p>
                       {resumeFile && (
                         <p className="text-xs text-green-600 mt-1">
@@ -539,7 +565,7 @@ export function ReferSomeone() {
                     <Alert>
                       <Gift className="h-4 w-4" />
                       <AlertDescription>
-                        <strong>Referral Bonus:</strong> Earn $3,000-$5,000 for successful hires based on position level. 
+                        <strong>Referral Bonus:</strong> Earn ₹5,000 - ₹25,000 for successful hires based on position level. 
                         Bonus is paid after the candidate completes 90 days of employment.
                       </AlertDescription>
                     </Alert>
@@ -568,16 +594,20 @@ export function ReferSomeone() {
                     <h4 className="font-medium mb-2">Bonus Structure:</h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
+                        <span>Strategic/Hard to Fill Roles</span>
+                        <span className="font-medium">₹25,000</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span>Senior Roles</span>
-                        <span className="font-medium">$5,000</span>
+                        <span className="font-medium">₹15,000</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Mid-level Roles</span>
-                        <span className="font-medium">$4,000</span>
+                        <span className="font-medium">₹10,000</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Junior Roles</span>
-                        <span className="font-medium">$3,000</span>
+                        <span>Entry Level Roles</span>
+                        <span className="font-medium">₹5,000</span>
                       </div>
                     </div>
                   </div>
@@ -719,7 +749,7 @@ export function ReferSomeone() {
                         <TableCell>
                           <div className="text-sm">
                             <div className="font-medium">
-                              ${(referral.bonus_amount || 0).toLocaleString()}
+                              ₹{(referral.bonus_amount || 0).toLocaleString()}
                             </div>
                             {referral.bonus_amount > 0 && (
                               <div className={`text-xs ${referral.bonus_paid ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -728,7 +758,7 @@ export function ReferSomeone() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>{format(new Date(referral.created_at), 'MMM dd, yyyy')}</TableCell>
+                        <TableCell>{formatDateForDisplay(referral.created_at, 'MMM dd, yyyy')}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

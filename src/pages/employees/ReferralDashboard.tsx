@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAllReferrals, useUpdateReferralStatus } from '@/hooks/useEmployees';
 import { useCreateJobPosition, useDepartmentsBasic, useAllJobPositions, useUpdateJobPosition, useDeleteJobPosition } from '@/hooks/useATS';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -16,7 +16,6 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   UserPlus,
-  Search,
   Filter,
   Eye,
   Edit,
@@ -32,7 +31,7 @@ import {
   Plus,
   Minus
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDateForDisplay } from '@/utils/dateUtils';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ConfirmDelete } from '@/components/ui/confirm-delete';
 
@@ -47,11 +46,16 @@ export function ReferralDashboard() {
   const { data: allPositions } = useAllJobPositions();
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedReferral, setSelectedReferral] = useState<any>(null);
   const [newStatus, setNewStatus] = useState('');
   const [hrNotes, setHrNotes] = useState('');
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  
+  // Bonus fields for update dialog
+  const [bonusEligible, setBonusEligible] = useState(false);
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusPaid, setBonusPaid] = useState(false);
 
   // Create Job Position form state
   const [isCreatePositionOpen, setIsCreatePositionOpen] = useState(false);
@@ -71,14 +75,7 @@ export function ReferralDashboard() {
   const [howToApply, setHowToApply] = useState('');
   const [applicationDeadline, setApplicationDeadline] = useState('');
   const [referralEncouraged, setReferralEncouraged] = useState(true);
-  // Legacy fields (keeping for backward compatibility)
-  const [positionDescription, setPositionDescription] = useState('');
-  const [positionRequirements, setPositionRequirements] = useState('');
-  const [experienceLevel, setExperienceLevel] = useState('mid');
-  const [employmentType, setEmploymentType] = useState('full_time');
-  const [salaryMin, setSalaryMin] = useState('');
-  const [salaryMax, setSalaryMax] = useState('');
-  const [jobStatus, setJobStatus] = useState('open');
+  // Legacy fields (keeping for backward compatibility) - removed unused variables
 
   // Positions tab filters and editing
   const [positionsSearch, setPositionsSearch] = useState('');
@@ -88,8 +85,6 @@ export function ReferralDashboard() {
   const [editingPosition, setEditingPosition] = useState<any>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDepartmentId, setEditDepartmentId] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editRequirements, setEditRequirements] = useState('');
   const [editExperienceLevel, setEditExperienceLevel] = useState('mid');
   const [editEmploymentType, setEditEmploymentType] = useState('full_time');
   const [editSalaryMin, setEditSalaryMin] = useState('');
@@ -106,6 +101,7 @@ export function ReferralDashboard() {
   const [editApplicationDeadline, setEditApplicationDeadline] = useState('');
   const [editReferralEncouraged, setEditReferralEncouraged] = useState(true);
   const [editWorkType, setEditWorkType] = useState('full_time');
+  // Removed unused editDescription and editRequirements
 
   // Bullet point helper functions
   const addBulletPoint = () => {
@@ -132,14 +128,7 @@ export function ReferralDashboard() {
       .join('\n');
   };
 
-  const stringToBullets = (str: string) => {
-    if (!str) return [''];
-    return str
-      .split('\n')
-      .map(line => line.replace(/^[•\-\*]\s*/, '').trim())
-      .filter(line => line)
-      .concat(['']); // Add empty bullet for new input
-  };
+  // Removed unused stringToBullets function
 
   const handleCreatePosition = () => {
     if (!user?.id || !jobTitle.trim() || !positionDepartmentId) return;
@@ -182,14 +171,7 @@ export function ReferralDashboard() {
         setHowToApply('');
         setApplicationDeadline('');
         setReferralEncouraged(true);
-        // Reset legacy fields
-        setPositionDescription('');
-        setPositionRequirements('');
-        setExperienceLevel('mid');
-        setEmploymentType('full_time');
-        setSalaryMin('');
-        setSalaryMax('');
-        setJobStatus('open');
+        // Reset legacy fields - removed unused variables
       }
     });
   };
@@ -198,7 +180,7 @@ export function ReferralDashboard() {
     const matchesSearch = referral.candidate_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          referral.candidate_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          referral.referred_by_user?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || referral.status === statusFilter;
+    const matchesStatus = !statusFilter || statusFilter === 'all' || referral.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
@@ -236,12 +218,18 @@ export function ReferralDashboard() {
     updateReferralStatus.mutate({
       id: selectedReferral.id,
       status: newStatus,
-      hrNotes: hrNotes.trim() || undefined
+      hrNotes: hrNotes.trim() || undefined,
+      bonusEligible,
+      bonusAmount: bonusEligible && bonusAmount ? parseFloat(bonusAmount) : null,
+      bonusPaid: bonusEligible ? bonusPaid : false
     }, {
       onSuccess: () => {
         setIsUpdateDialogOpen(false);
         setNewStatus('');
         setHrNotes('');
+        setBonusEligible(false);
+        setBonusAmount('');
+        setBonusPaid(false);
         setSelectedReferral(null);
       }
     });
@@ -314,7 +302,7 @@ export function ReferralDashboard() {
                 <CardTitle className="text-sm font-medium">Bonus Paid</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${totalBonusPaid.toLocaleString()}</div>
+                <div className="text-2xl font-bold">₹{totalBonusPaid.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Total distributed</p>
               </CardContent>
             </Card>
@@ -357,7 +345,7 @@ export function ReferralDashboard() {
                     variant="outline" 
                     onClick={() => {
                       setSearchTerm('');
-                      setStatusFilter('');
+                      setStatusFilter('all');
                     }}
                   >
                     Clear Filters
@@ -448,7 +436,7 @@ export function ReferralDashboard() {
                       <TableCell>
                         <div className="text-sm">
                           <div className="font-medium">
-                            ${(referral.bonus_amount || 0).toLocaleString()}
+                            ₹{(referral.bonus_amount || 0).toLocaleString()}
                           </div>
                           {referral.bonus_amount > 0 && (
                             <div className={`text-xs ${referral.bonus_paid ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -457,7 +445,7 @@ export function ReferralDashboard() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{format(new Date(referral.created_at), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{formatDateForDisplay(referral.created_at, 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Dialog>
@@ -502,9 +490,9 @@ export function ReferralDashboard() {
                                       <div>
                                         <p className="font-medium">LinkedIn Profile:</p>
                                         {selectedReferral.linkedin_profile ? (
-                                          <a href={selectedReferral.linkedin_profile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all">
-                                            View Profile
-                                          </a>
+                                          <p className="text-muted-foreground">
+                                            {selectedReferral.linkedin_profile}
+                                          </p>
                                         ) : (
                                           <p className="text-muted-foreground">Not provided</p>
                                         )}
@@ -681,7 +669,7 @@ export function ReferralDashboard() {
                                       <div>
                                         <p className="font-medium">Bonus Amount:</p>
                                         <p className="text-muted-foreground font-semibold">
-                                          ${(selectedReferral.bonus_amount || 0).toLocaleString()}
+                                          ₹{(selectedReferral.bonus_amount || 0).toLocaleString()}
                                         </p>
                                       </div>
                                       <div>
@@ -732,13 +720,13 @@ export function ReferralDashboard() {
                                       <div>
                                         <p className="font-medium">Submitted On:</p>
                                         <p className="text-muted-foreground">
-                                          {format(new Date(selectedReferral.created_at), 'MMM dd, yyyy HH:mm')}
+                                          {formatDateForDisplay(selectedReferral.created_at, 'MMM dd, yyyy HH:mm')}
                                         </p>
                                       </div>
                                       <div>
                                         <p className="font-medium">Last Updated:</p>
                                         <p className="text-muted-foreground">
-                                          {format(new Date(selectedReferral.updated_at), 'MMM dd, yyyy HH:mm')}
+                                          {formatDateForDisplay(selectedReferral.updated_at, 'MMM dd, yyyy HH:mm')}
                                         </p>
                                       </div>
                                       <div>
@@ -776,6 +764,9 @@ export function ReferralDashboard() {
                                   setSelectedReferral(referral);
                                   setNewStatus(referral.status);
                                   setHrNotes(referral.hr_notes || '');
+                                  setBonusEligible(referral.bonus_eligible || false);
+                                  setBonusAmount(referral.bonus_amount ? String(referral.bonus_amount) : '');
+                                  setBonusPaid(referral.bonus_paid || false);
                                 }}
                               >
                                 Update
@@ -815,6 +806,47 @@ export function ReferralDashboard() {
                                     className="mt-1"
                                     rows={3}
                                   />
+                                </div>
+
+                                {/* Bonus Management Section */}
+                                <div className="space-y-4 border-t pt-4">
+                                  <h4 className="font-medium text-sm">Bonus Management</h4>
+                                  
+                                  <div className="flex items-center space-x-2">
+                                    <Switch 
+                                      checked={bonusEligible} 
+                                      onCheckedChange={setBonusEligible}
+                                      className="data-[state=unchecked]:bg-gray-300"
+                                    />
+                                    <Label className="text-sm">Bonus Eligible</Label>
+                                  </div>
+
+                                  {bonusEligible && (
+                                    <div className="space-y-3">
+                                      <div>
+                                        <Label htmlFor="bonusAmount" className="text-sm">Bonus Amount (₹)</Label>
+                                        <Input
+                                          id="bonusAmount"
+                                          type="number"
+                                          value={bonusAmount}
+                                          onChange={(e) => setBonusAmount(e.target.value)}
+                                          placeholder="Enter bonus amount"
+                                          className="mt-1"
+                                          min="0"
+                                          step="100"
+                                        />
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <Switch 
+                                          checked={bonusPaid} 
+                                          onCheckedChange={setBonusPaid} 
+                                          className="data-[state=unchecked]:bg-gray-300"
+                                        />
+                                        <Label className="text-sm">Bonus Paid</Label>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="flex justify-end gap-2">
@@ -1088,6 +1120,7 @@ export function ReferralDashboard() {
                     <TableHead>Type</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Referrals</TableHead>
                     <TableHead>Posted</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1112,7 +1145,12 @@ export function ReferralDashboard() {
                           {pos.status.replace('_', ' ')}
                         </Badge>
                       </TableCell>
-                      <TableCell>{format(new Date(pos.created_at), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>
+                        <Badge className={pos.referral_encouraged ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}>
+                          {pos.referral_encouraged ? 'Encouraged' : 'Not Encouraged'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDateForDisplay(pos.created_at, 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Dialog>
@@ -1224,7 +1262,7 @@ export function ReferralDashboard() {
                                           <div>
                                             <p className="font-medium">Application Deadline:</p>
                                             <p className="text-muted-foreground">
-                                              {format(new Date(pos.application_deadline), 'MMM dd, yyyy')}
+                                              {formatDateForDisplay(pos.application_deadline, 'MMM dd, yyyy')}
                                             </p>
                                           </div>
                                         )}
@@ -1289,11 +1327,11 @@ export function ReferralDashboard() {
                                     </div>
                                     <div>
                                       <p className="font-medium">Created At:</p>
-                                      <p className="text-muted-foreground">{pos.created_at ? format(new Date(pos.created_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
+                                      <p className="text-muted-foreground">{pos.created_at ? formatDateForDisplay(pos.created_at, 'MMM dd, yyyy HH:mm') : '—'}</p>
                                     </div>
                                     <div>
                                       <p className="font-medium">Updated At:</p>
-                                      <p className="text-muted-foreground">{pos.updated_at ? format(new Date(pos.updated_at), 'MMM dd, yyyy HH:mm') : '—'}</p>
+                                      <p className="text-muted-foreground">{pos.updated_at ? formatDateForDisplay(pos.updated_at, 'MMM dd, yyyy HH:mm') : '—'}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -1321,9 +1359,7 @@ export function ReferralDashboard() {
                                 setEditLocation(pos.location || '');
                                 setEditIsRemote(!!pos.is_remote);
                                 setEditStatus(pos.status || 'open');
-                                // Legacy fields for backward compatibility
-                                setEditDescription(pos.description || '');
-                                setEditRequirements(pos.requirements || '');
+                                // Legacy fields for backward compatibility - removed unused variables
                               }}>
                                 <Edit className="h-4 w-4"/>
                               </Button>

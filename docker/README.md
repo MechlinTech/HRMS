@@ -45,7 +45,6 @@ This directory contains Docker configuration files for the HRMS (Human Resource 
 2. **Access the application:**
    - Frontend: http://localhost:3000
    - Database: localhost:5432
-   - Redis: localhost:6379
 
 ## Environment Variables
 
@@ -79,11 +78,6 @@ This directory contains Docker configuration files for the HRMS (Human Resource 
 - **Port:** 5432 (production), 5433 (development)
 - **Technology:** PostgreSQL 15
 - **Includes:** Supabase migrations auto-loaded
-
-### Cache (redis)
-- **Port:** 6379
-- **Technology:** Redis 7
-- **Purpose:** Session storage, caching
 
 ## Docker Commands
 
@@ -129,7 +123,6 @@ All services include health checks:
 
 - **Frontend:** HTTP check on `/health` endpoint
 - **PostgreSQL:** `pg_isready` command
-- **Redis:** `redis-cli ping` command
 
 Check service health:
 ```bash
@@ -139,7 +132,6 @@ docker-compose ps
 ## Volumes
 
 - `postgres_data` - PostgreSQL data persistence
-- `redis_data` - Redis data persistence
 - `nginx_logs` - Nginx access and error logs
 
 ## Networking

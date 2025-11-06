@@ -8,7 +8,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: hrms-frontend
     ports:
-      - "3000:80"
+      - "5173:80"
     environment:
       # Supabase Configuration
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
@@ -17,10 +17,10 @@ services:
       # Azure AD Configuration
       - VITE_AZURE_CLIENT_ID=${VITE_AZURE_CLIENT_ID}
       - VITE_AZURE_TENANT_ID=${VITE_AZURE_TENANT_ID}
-      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:3000}
+      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:5173}
       
       # API Configuration
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000/api}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5173/api}
       - NODE_ENV=production
     volumes:
       - nginx_logs:/var/log/nginx
@@ -57,24 +57,6 @@ services:
     networks:
       - hrms-network
 
-  # Redis for Caching (Optional)
-  redis:
-    image: redis:7-alpine
-    container_name: hrms-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - hrms-network
-    command: redis-server --appendonly yes
-
   # Nginx Reverse Proxy (Optional - for production setup)
   nginx-proxy:
     image: nginx:alpine
@@ -96,8 +78,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
   nginx_logs:
     driver: local

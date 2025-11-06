@@ -9,6 +9,7 @@ export const DASHBOARDS = {
   ATS: 'ats',
   LMS: 'lms',
   EXIT: 'exit',
+  POLICIES: 'policies',
 } as const;
 
 // Role Constants
@@ -44,7 +45,7 @@ export const roleNameMap = {
 } as const;
 
 export const getRoleDisplayName = (role: string) => {
-  return roleNameMap[role];
+  return roleNameMap[role as keyof typeof roleNameMap];
 };
 
 // Dashboard Configuration
@@ -61,11 +62,12 @@ export const DASHBOARD_CONFIG = [
       { id: 'leave', name: 'Leave Application', slug: 'leave', path: '/dashboard/leave', icon: 'Calendar' },
       { id: 'assets', name: 'My Assets', slug: 'assets', path: '/dashboard/assets', icon: 'Package' },
       { id: 'documents', name: 'Documents', slug: 'documents', path: '/dashboard/documents', icon: 'FileText' },
+      { id: 'policies', name: 'Policies', slug: 'policies', path: '/dashboard/policies', icon: 'Shield' },
       // { id: 'complaints', name: 'Complaints', slug: 'complaints', path: '/dashboard/complaints', icon: 'MessageSquare' },
-      // { id: 'performance', name: 'Performance', slug: 'performance', path: '/dashboard/performance', icon: 'Target' },
+      { id: 'performance', name: 'Performance', slug: 'performance', path: '/dashboard/performance', icon: 'Target' },
       { id: 'feedback', name: 'HRMS Feedback', slug: 'feedback', path: '/dashboard/feedback', icon: 'MessageSquare' },
       // { id: 'referrals', name: 'Refer Someone', slug: 'referrals', path: '/dashboard/referrals', icon: 'UserPlus' },
-      // { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
+      { id: 'settings', name: 'Settings', slug: 'settings', path: '/dashboard/settings', icon: 'Settings' },
     ],
   },
   {
@@ -86,22 +88,22 @@ export const DASHBOARD_CONFIG = [
       { id: 'feedback', name: 'HRMS Feedback', slug: 'feedback', path: '/employees/feedback', icon: 'MessageSquare' },
     ],
   },
-  // {
-  //   id: 'performance',
-  //   name: 'Performance Management',
-  //   slug: 'performance',
-  //   description: 'Track and manage performance metrics',
-  //   icon: 'Target',
-  //   color: 'purple',
-  //   pages: [
-  //     { id: 'overview', name: 'Performance Overview', slug: 'overview', path: '/performance', icon: 'Target' },
-  //     // { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
-  //     // { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
-  //     // { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
-  //     { id: 'KRA', name: 'KRA', slug: 'kra', path: '/performance/kra', icon: 'SquareChartGantt' },
-  //     // { id: 'appraisals', name: 'Appraisals', slug: 'appraisals', path: '/performance/appraisals', icon: 'BanknoteArrowUp' },
-  //   ],
-  // },
+  {
+    id: 'performance',
+    name: 'Performance Management',
+    slug: 'performance',
+    description: 'Track and manage performance metrics',
+    icon: 'Target',
+    color: 'purple',
+    pages: [
+      { id: 'overview', name: 'Performance Overview', slug: 'overview', path: '/performance', icon: 'Target' },
+      // { id: 'goals', name: 'Goals Management', slug: 'goals', path: '/performance/goals', icon: 'Target' },
+      // { id: 'evaluations', name: 'Evaluations', slug: 'evaluations', path: '/performance/evaluations', icon: 'BarChart3' },
+      // { id: 'feedback', name: 'Feedback', slug: 'feedback', path: '/performance/feedback', icon: 'MessageCircle' },
+      { id: 'KRA', name: 'KRA', slug: 'kra', path: '/performance/kra', icon: 'SquareChartGantt' },
+      // { id: 'appraisals', name: 'Appraisals', slug: 'appraisals', path: '/performance/appraisals', icon: 'BanknoteArrowUp' },
+    ],
+  },
   // {
   //   id: 'grievance',
   //   name: 'Grievance Management',
@@ -128,20 +130,20 @@ export const DASHBOARD_CONFIG = [
   //     { id: 'logs', name: 'Billing Logs', slug: 'logs', path: '/bd/logs', icon: 'History' },
   //   ],
   // },
-  // {
-  //   id: 'finance',
-  //   name: 'Finance',
-  //   slug: 'finance',
-  //   description: 'Financial operations and payroll',
-  //   icon: 'DollarSign',
-  //   color: 'emerald',
-  //   pages: [
-  //     { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
-  //     { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
-  //     { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
-  //     { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
-  //   ],
-  // },
+  {
+    id: 'finance',
+    name: 'Finance',
+    slug: 'finance',
+    description: 'Financial operations and payroll',
+    icon: 'DollarSign',
+    color: 'emerald',
+    pages: [
+      { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
+      { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
+      { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
+      { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
+    ],
+  },
   // {
   //   id: 'ats',
   //   name: 'ATS',
@@ -184,11 +186,25 @@ export const DASHBOARD_CONFIG = [
   //     { id: 'interview', name: 'Exit Interview', slug: 'interview', path: '/exit/interview', icon: 'MessageSquare' },
   //   ],
   // },
+  {
+    id: 'policies',
+    name: 'Policies',
+    slug: 'policies',
+    description: 'Manage organizational policies and access permissions',
+    icon: 'Shield',
+    color: 'blue',
+    pages: [
+      { id: 'all-policies', name: 'All Policies', slug: 'all-policies', path: '/policies', icon: 'FileText' },
+      { id: 'assign', name: 'Assign Policies', slug: 'assign', path: '/policies/assign', icon: 'Send' },
+      { id: 'history', name: 'History', slug: 'history', path: '/policies/history', icon: 'History' },
+      { id: 'logs', name: 'Activity Logs', slug: 'logs', path: '/policies/logs', icon: 'BarChart3' },
+      // { id: 'permissions', name: 'Permissions', slug: 'permissions', path: '/policies/permissions', icon: 'Settings' },
+    ],
+  },
 ];
 
 // Role to Dashboard Mapping
 export const ROLE_DASHBOARD_MAPPING = {
-  [ROLES.SUPER_ADMIN]: Object.values(DASHBOARDS),
   [ROLES.ADMIN]: Object.values(DASHBOARDS),
   [ROLES.HR]: [
     DASHBOARDS.SELF,
@@ -197,6 +213,7 @@ export const ROLE_DASHBOARD_MAPPING = {
     DASHBOARDS.ATS,
     DASHBOARDS.LMS,
     DASHBOARDS.EXIT,
+    DASHBOARDS.POLICIES,
   ],
   [ROLES.HRM]: [
     DASHBOARDS.SELF,
@@ -205,6 +222,7 @@ export const ROLE_DASHBOARD_MAPPING = {
     DASHBOARDS.ATS,
     DASHBOARDS.LMS,
     DASHBOARDS.EXIT,
+    DASHBOARDS.POLICIES,
   ],
   [ROLES.SDM]: [
     DASHBOARDS.SELF,
@@ -304,4 +322,6 @@ export const NOTIFICATION_TYPES = {
   PROJECT_UNASSIGNED: 'project_unassigned',
   PROJECT_ROLE_UPDATED: 'project_role_updated',
   PROJECT_DELETED: 'project_deleted',
+  POLICY_ASSIGNED: 'policy_assigned',
+  POLICY_ACKNOWLEDGED: 'policy_acknowledged',
 } as const;

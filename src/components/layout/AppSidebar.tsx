@@ -54,7 +54,10 @@ import {
   Clock,
   Building,
   SquareChartGantt,
-  BanknoteArrowUp
+  BanknoteArrowUp,
+  Shield,
+  Activity,
+  Send
 } from 'lucide-react';
 
 const iconMap = {
@@ -90,7 +93,10 @@ const iconMap = {
   Clock,
   Building,
   SquareChartGantt,
-  BanknoteArrowUp
+  BanknoteArrowUp,
+  Shield,
+  Activity,
+  Send
 };
 
 interface AppSidebarProps {

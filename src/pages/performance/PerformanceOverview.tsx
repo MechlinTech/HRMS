@@ -14,7 +14,8 @@ import {
   CartesianGrid, 
   Tooltip, 
   Legend, 
-  ResponsiveContainer
+  ResponsiveContainer,
+  Cell
 } from 'recharts';
 import { 
   BarChart3, 
@@ -25,7 +26,7 @@ import {
   Download,
   RefreshCw
 } from 'lucide-react';
-import { parseISO, isWithinInterval } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { toast } from 'sonner';
 
 // Import KRA hooks and types
@@ -38,8 +39,8 @@ import { supabase } from '@/services/supabase';
 
 interface PerformanceFilters {
   employeeId: string;
-  startDate: string;
-  endDate: string;
+  evaluationStartDate: string;
+  evaluationEndDate: string;
   status: string;
 }
 
@@ -58,8 +59,8 @@ export function PerformanceOverview() {
   // State for filters
   const [filters, setFilters] = useState<PerformanceFilters>({
     employeeId: '',
-    startDate: '',
-    endDate: '',
+    evaluationStartDate: '',
+    evaluationEndDate: '',
     status: ''
   });
 
@@ -75,8 +76,8 @@ export function PerformanceOverview() {
     isLoading: metricsLoading 
   } = usePerformanceMetrics({
     employeeId: filters.employeeId,
-    startDate: filters.startDate,
-    endDate: filters.endDate
+    startDate: filters.evaluationStartDate,
+    endDate: filters.evaluationEndDate
   });
 
 
@@ -167,26 +168,30 @@ export function PerformanceOverview() {
         return false;
       }
 
-      // Date range filter
-      if (filters.startDate || filters.endDate) {
-        const assignmentDate = assignment.assigned_date;
-        if (!assignmentDate) return false;
-
-        const date = parseISO(assignmentDate);
+      // Evaluation period date range filter
+      if ((filters.evaluationStartDate || filters.evaluationEndDate) && assignment.template) {
+        const templateStart = assignment.template.evaluation_period_start;
+        const templateEnd = assignment.template.evaluation_period_end;
         
-        if (filters.startDate && filters.endDate) {
-          const startDate = parseISO(filters.startDate);
-          const endDate = parseISO(filters.endDate);
+        if (!templateStart || !templateEnd) return false;
+
+        const evalStart = parseISO(templateStart);
+        const evalEnd = parseISO(templateEnd);
+        
+        if (filters.evaluationStartDate && filters.evaluationEndDate) {
+          const filterStart = parseISO(filters.evaluationStartDate);
+          const filterEnd = parseISO(filters.evaluationEndDate);
           
-          if (!isWithinInterval(date, { start: startDate, end: endDate })) {
+          // Check if evaluation period overlaps with filter range
+          if (evalEnd < filterStart || evalStart > filterEnd) {
             return false;
           }
-        } else if (filters.startDate) {
-          const startDate = parseISO(filters.startDate);
-          if (date < startDate) return false;
-        } else if (filters.endDate) {
-          const endDate = parseISO(filters.endDate);
-          if (date > endDate) return false;
+        } else if (filters.evaluationStartDate) {
+          const filterStart = parseISO(filters.evaluationStartDate);
+          if (evalEnd < filterStart) return false;
+        } else if (filters.evaluationEndDate) {
+          const filterEnd = parseISO(filters.evaluationEndDate);
+          if (evalStart > filterEnd) return false;
         }
       }
 
@@ -195,32 +200,53 @@ export function PerformanceOverview() {
   }, [assignments, filters]);
 
   // Helper function to recalculate KRA percentage using correct logic
-  const recalculateKRAPercentage = (assignment: any): number => {
-    // Temporarily disabled - will re-enable after migration is applied
-    return assignment.overall_percentage || 0;
+  // Currently disabled - will re-enable after migration is applied
+  // const recalculateKRAPercentage = (assignment: any): number => {
+  //   return assignment.overall_percentage || 0;
+  // };
+
+  // Create a map to store unique strategic goal titles and their assigned colors
+  const goalColorMap = useMemo(() => {
+    const colors = [
+      '#dc2626', // red-600
+      '#2563eb', // blue-600
+      '#16a34a', // green-600
+      '#ca8a04', // yellow-600
+      '#9333ea', // purple-600
+      '#ea580c', // orange-600
+      '#0891b2', // cyan-600
+      '#be185d', // pink-600
+      '#059669', // emerald-600
+      '#7c3aed', // violet-600
+      '#0d9488', // teal-600
+      '#f59e0b', // amber-500
+    ];
+
+    const uniqueGoalTitles = new Set<string>();
     
-    /* TODO: Re-enable after migration
-    if (!assignment.evaluations || assignment.evaluations.length === 0) {
-      return assignment.overall_percentage || 0;
-    }
+    // Collect all unique strategic goal titles from assignments
+    filteredAssignments.forEach(assignment => {
+      if (assignment.evaluations) {
+        assignment.evaluations.forEach((evaluation: any) => {
+          if (evaluation.goal?.strategic_goal_title) {
+            uniqueGoalTitles.add(evaluation.goal.strategic_goal_title);
+          }
+        });
+      }
+    });
 
-    try {
-      const evaluationData = assignment.evaluations.map((evaluation: any) => ({
-        goal: {
-          goal_id: evaluation.goal?.goal_id || '',
-          weight: evaluation.goal?.weight || 0,
-          level_5_points: evaluation.goal?.max_score || evaluation.goal?.level_5_points || 100
-        },
-        awarded_points: evaluation.awarded_points || 0
-      }));
+    // Create a map with sequential color assignment
+    const colorMap = new Map<string, string>();
+    Array.from(uniqueGoalTitles).sort().forEach((title, index) => {
+      colorMap.set(title, colors[index % colors.length]);
+    });
 
-      const calculatedPercentage = calculateKRAPercentage(evaluationData);
-      return calculatedPercentage;
-    } catch (error) {
-      console.warn('Error recalculating KRA percentage:', error);
-      return assignment.overall_percentage || 0;
-    }
-    */
+    return colorMap;
+  }, [filteredAssignments]);
+
+  // Helper function to get color for a strategic goal title
+  const getGoalColor = (strategicGoalTitle: string): string => {
+    return goalColorMap.get(strategicGoalTitle) || '#6b7280'; // fallback to gray
   };
 
   // Process data for KRA percentage overview chart
@@ -271,20 +297,21 @@ export function PerformanceOverview() {
       const kraPeriod = assignment.template?.template_name || 'Unknown';
       const employeeName = assignment.employee?.full_name || 'Unknown';
       
-      assignment.evaluations.forEach((evaluation: any) => {
+        assignment.evaluations.forEach((evaluation: any) => {
         
         if (!evaluation.goal) return;
 
         const goalId = evaluation.goal.goal_id;
         const goalTitle = evaluation.goal.strategic_goal_title;
         const shortGoalTitle = goalTitle.length > 30 ? goalTitle.substring(0, 30) + '...' : goalTitle;
+        const quarter = evaluation.quarter || 'Q1'; // Get the specific quarter
         
         const maxPossiblePoints = evaluation.goal.level_5_points || evaluation.goal.max_score || 100;
-        const awardedPoints = evaluation.awarded_points || 0;
+        const awardedPoints = evaluation.awarded_marks || 0; // Use awarded_marks (level points) instead of awarded_points
         const percentage = maxPossiblePoints > 0 ? (awardedPoints / maxPossiblePoints) * 100 : 0;
         
-        // Create a unique display name combining goal ID, period, and employee
-        const displayName = `${goalId} - ${kraPeriod}`;
+        // Create a unique display name combining goal ID, period, and quarter
+        const displayName = `${goalId} - ${kraPeriod} - ${quarter}`;
         
         chartData.push({
           displayName: displayName, // Unique key for X-axis
@@ -292,18 +319,20 @@ export function PerformanceOverview() {
           goalTitle: goalTitle,
           shortGoalTitle: shortGoalTitle,
           kraPeriod: kraPeriod,
+          quarter: quarter, // Add quarter information
           employeeName: employeeName,
           points: awardedPoints,
           maxPoints: maxPossiblePoints,
           percentage: percentage,
           weight: evaluation.goal.weight || 0,
           assignmentId: assignment.id,
-          evaluationId: evaluation.id
+          evaluationId: evaluation.id,
+          color: getGoalColor(goalTitle) // Add color based on strategic goal title
         });
       });
     });
 
-    // Sort by goal ID first, then by KRA period for consistent ordering
+    // Sort by goal ID first, then by KRA period, then by quarter for consistent ordering
     return chartData
       .sort((a, b) => {
         // First sort by goal ID
@@ -311,97 +340,121 @@ export function PerformanceOverview() {
         if (goalIdCompare !== 0) return goalIdCompare;
         
         // Then by KRA period
-        return a.kraPeriod.localeCompare(b.kraPeriod);
+        const periodCompare = a.kraPeriod.localeCompare(b.kraPeriod);
+        if (periodCompare !== 0) return periodCompare;
+        
+        // Finally by quarter (Q1, Q2, Q3, Q4)
+        const quarterOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+        return (quarterOrder[a.quarter as keyof typeof quarterOrder] || 0) - (quarterOrder[b.quarter as keyof typeof quarterOrder] || 0);
       })
       .slice(0, 25); // Show more data points to see progression
-  }, [filteredAssignments]);
+  }, [filteredAssignments, getGoalColor]);
 
-  // Helper function to assign colors to goals
-  const getGoalColor = (goalId: string) => {
-    const colors = [
-      '#f97316', // orange-500
-      '#fb923c', // orange-400
-      '#f59e0b', // amber-500
-      '#fbbf24', // amber-400
-      '#ea580c', // orange-600
-      '#d97706', // amber-600
-      '#fb7185', // rose-400
-      '#f472b6', // pink-400
-    ];
-    
-    // Simple hash function to assign consistent colors
-    let hash = 0;
-    for (let i = 0; i < goalId.length; i++) {
-      hash = goalId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  // Process progression over time data - showing how each goal performs across different KRA periods
+  // Process progression over time data - showing cumulative goal performance across quarters
   const progressionData = useMemo(() => {
-    // Group evaluations by goal and KRA period
+    // Group evaluations by goal and track cumulative performance across quarters
     const goalProgressionMap = new Map<string, Map<string, any>>();
     
     filteredAssignments.forEach((assignment) => {
       if (!assignment.evaluations || assignment.evaluations.length === 0) return;
       
-      const kraSheetName = assignment.template?.template_name || 'Unknown';
+      const templateName = assignment.template?.template_name || 'Unknown Template';
+      const employeeName = assignment.employee?.full_name || 'Unknown Employee';
+      
+      // Group evaluations by goal and quarter
+      const goalQuarterMap = new Map<string, Map<string, any>>();
       
       assignment.evaluations.forEach((evaluation: any) => {
-        if (!evaluation.goal) return;
+        if (!evaluation.goal || !evaluation.quarter) return;
         
         const goalId = evaluation.goal.goal_id;
         const goalTitle = evaluation.goal.strategic_goal_title;
+        const quarter = evaluation.quarter;
         
-        // Ensure we're getting the correct max points - prefer level_5_points
+        if (!goalQuarterMap.has(goalId)) {
+          goalQuarterMap.set(goalId, new Map());
+        }
+        
         const maxPossiblePoints = evaluation.goal.level_5_points || evaluation.goal.max_score || 100;
         const awardedPoints = evaluation.awarded_points || 0;
+        const awardedMarks = evaluation.awarded_marks || 0; // This is what the manager actually awarded
         const percentage = maxPossiblePoints > 0 ? (awardedPoints / maxPossiblePoints) * 100 : 0;
         
-        if (!goalProgressionMap.has(goalId)) {
-          goalProgressionMap.set(goalId, new Map());
-        }
+        goalQuarterMap.get(goalId)!.set(quarter, {
+          goalId,
+          goalTitle,
+          quarter,
+          percentage,
+          awardedPoints,
+          awardedMarks, // Manager's awarded marks/points
+          maxPossiblePoints,
+          templateName,
+          employeeName
+        });
+      });
+      
+      // Store individual quarterly awarded marks for each goal
+      goalQuarterMap.forEach((quarterMap, goalId) => {
+        const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
         
-        const goalData = goalProgressionMap.get(goalId)!;
-        
-        // Only set if this KRA sheet doesn't already have this goal (prevent duplicates)
-        if (!goalData.has(kraSheetName)) {
-          goalData.set(kraSheetName, {
-            goalId,
-            goalTitle,
-            kraSheet: kraSheetName,
-            points: awardedPoints,
-            maxPoints: maxPossiblePoints,
-            percentage: percentage,
-            weight: evaluation.goal.weight || 0,
-            evaluationId: evaluation.id
-          });
-        }
+        quarters.forEach(quarter => {
+          const quarterData = quarterMap.get(quarter);
+          if (quarterData) {
+            const periodKey = `${templateName} - ${quarter}`;
+            
+            if (!goalProgressionMap.has(goalId)) {
+              goalProgressionMap.set(goalId, new Map());
+            }
+            
+            goalProgressionMap.get(goalId)!.set(periodKey, {
+              goalId,
+              goalTitle: quarterData.goalTitle,
+              quarter,
+              periodKey,
+              quarterAwardedMarks: quarterData.awardedMarks,
+              quarterMaxMarks: quarterData.maxPossiblePoints || 100,
+              templateName,
+              employeeName
+            });
+          }
+        });
       });
     });
     
     // Convert to array format for line chart
-    // Create a list of all KRA periods
-    const allKraPeriods = new Set<string>();
-    filteredAssignments.forEach(a => {
-      if (a.template?.template_name) {
-        allKraPeriods.add(a.template.template_name);
-      }
+    const allPeriods = new Set<string>();
+    goalProgressionMap.forEach((periodMap) => {
+      periodMap.forEach((_, periodKey) => {
+        allPeriods.add(periodKey);
+      });
     });
     
-    const sortedPeriods = Array.from(allKraPeriods).sort();
+    const sortedPeriods = Array.from(allPeriods).sort((a, b) => {
+      // Sort by template name first, then by quarter
+      const [templateA, quarterA] = a.split(' - ');
+      const [templateB, quarterB] = b.split(' - ');
+      
+      if (templateA !== templateB) {
+        return templateA.localeCompare(templateB);
+      }
+      
+      // Sort quarters in order Q1, Q2, Q3, Q4
+      const quarterOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+      return (quarterOrder[quarterA as keyof typeof quarterOrder] || 0) - (quarterOrder[quarterB as keyof typeof quarterOrder] || 0);
+    });
     
-    // Build chart data with one data point per KRA period
+    // Build chart data with one data point per period
     const chartData = sortedPeriods.map(period => {
       const dataPoint: any = { kraSheet: period };
       
       goalProgressionMap.forEach((periodMap, goalId) => {
         const goalData = periodMap.get(period);
         if (goalData) {
-          dataPoint[goalId] = goalData.percentage;
+          dataPoint[goalId] = goalData.quarterAwardedMarks;
           dataPoint[`${goalId}_goalTitle`] = goalData.goalTitle;
-          dataPoint[`${goalId}_points`] = goalData.points;
-          dataPoint[`${goalId}_maxPoints`] = goalData.maxPoints;
+          dataPoint[`${goalId}_quarter`] = goalData.quarter;
+          dataPoint[`${goalId}_quarterMarks`] = goalData.quarterAwardedMarks;
+          dataPoint[`${goalId}_quarterMaxMarks`] = goalData.quarterMaxMarks;
         }
       });
       
@@ -413,8 +466,8 @@ export function PerformanceOverview() {
       const firstEntry = Array.from(periodMap.values())[0];
       return {
         goalId,
-        goalTitle: firstEntry.goalTitle,
-        color: getGoalColor(goalId)
+        goalTitle: `${goalId}: ${firstEntry.goalTitle}`,
+        color: getGoalColor(firstEntry.goalTitle) // Use goal title for color
       };
     });
     
@@ -430,8 +483,8 @@ export function PerformanceOverview() {
   const clearFilters = () => {
     setFilters({
       employeeId: '',
-      startDate: '',
-      endDate: '',
+      evaluationStartDate: '',
+      evaluationEndDate: '',
       status: ''
     });
   };
@@ -483,12 +536,11 @@ export function PerformanceOverview() {
             {/* Employee Filter */}
             <div className="space-y-2">
               <Label htmlFor="employee-filter">Employee</Label>
-              <Select value={filters.employeeId || 'all'} onValueChange={(value) => handleFilterChange('employeeId', value === 'all' ? '' : value)}>
+              <Select value={filters.employeeId} onValueChange={(value) => handleFilterChange('employeeId', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All employees" />
+                  <SelectValue placeholder="Select employee" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All employees</SelectItem>
                   {availableEmployees.length === 0 ? (
                     <SelectItem value="no-employees" disabled>
                       No employees available
@@ -504,37 +556,36 @@ export function PerformanceOverview() {
               </Select>
             </div>
 
-            {/* Start Date Filter */}
+            {/* Evaluation Start Date Filter */}
             <div className="space-y-2">
-              <Label htmlFor="start-date">Start Date</Label>
+              <Label htmlFor="evaluation-start-date">Evaluation Start Date</Label>
               <Input
-                id="start-date"
+                id="evaluation-start-date"
                 type="date"
-                value={filters.startDate}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                value={filters.evaluationStartDate}
+                onChange={(e) => handleFilterChange('evaluationStartDate', e.target.value)}
               />
             </div>
 
-            {/* End Date Filter */}
+            {/* Evaluation End Date Filter */}
             <div className="space-y-2">
-              <Label htmlFor="end-date">End Date</Label>
+              <Label htmlFor="evaluation-end-date">Evaluation End Date</Label>
               <Input
-                id="end-date"
+                id="evaluation-end-date"
                 type="date"
-                value={filters.endDate}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                value={filters.evaluationEndDate}
+                onChange={(e) => handleFilterChange('evaluationEndDate', e.target.value)}
               />
             </div>
 
             {/* Status Filter */}
             <div className="space-y-2">
               <Label htmlFor="status-filter">Status</Label>
-              <Select value={filters.status || 'all'} onValueChange={(value) => handleFilterChange('status', value === 'all' ? '' : value)}>
+              <Select value={filters.status} onValueChange={(value) => handleFilterChange('status', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="assigned">Assigned</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="submitted">Submitted</SelectItem>
@@ -643,7 +694,7 @@ export function PerformanceOverview() {
                       <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.7} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" opacity={0.3} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                   <XAxis 
                     dataKey="kraSheet" 
                     angle={-45}
@@ -651,24 +702,24 @@ export function PerformanceOverview() {
                     height={80}
                     fontSize={11}
                     interval={0}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <YAxis 
                     domain={[0, 100]} 
-                    label={{ value: 'Performance %', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#ea580c' } }}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    label={{ value: 'Cumulative Performance %', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#000000' } }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <Tooltip 
                     formatter={(value: number) => [`${value.toFixed(1)}%`, 'Performance']}
                     labelFormatter={(label) => `KRA Sheet: ${label}`}
                     contentStyle={{
                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                      border: '1px solid #fed7aa',
+                      border: '1px solid #e5e7eb',
                       borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(251, 146, 60, 0.1)',
-                      color: '#ea580c'
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      color: '#000000'
                     }}
                   />
                   <Legend />
@@ -711,13 +762,7 @@ export function PerformanceOverview() {
                   data={goalComparisonData} 
                   margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                 >
-                  <defs>
-                    <linearGradient id="colorGradientSecondary" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#fb923c" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.7} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" opacity={0.3} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                   <XAxis 
                     dataKey="displayName" 
                     angle={-45}
@@ -725,28 +770,44 @@ export function PerformanceOverview() {
                     height={80}
                     fontSize={9}
                     interval={0}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <YAxis 
-                    label={{ value: 'Points', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#ea580c' } }}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    label={{ value: 'Points', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#000000' } }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <Tooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
+                    cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
+                    allowEscapeViewBox={{ x: false, y: true }}
+                    content={({ active, payload, coordinate }) => {
+                      if (active && payload && payload.length && coordinate) {
                         const data = payload[0].payload;
+                        
+                        // Position tooltip above chart area if mouse is in lower half, below if in upper half
+                        const isLowerHalf = coordinate.y > 200; // Approximate middle of chart
+                        
                         return (
-                          <div className="bg-white/95 p-3 border border-orange-200 rounded-lg shadow-lg shadow-orange-100/50 max-w-sm">
-                            <p className="font-medium text-orange-800 mb-1">{`Goal ${data.goalId}`}</p>
-                            <p className="text-sm text-orange-900 mb-2">{data.goalTitle}</p>
-                            <div className="border-t border-orange-200 pt-2 space-y-1">
-                              <p className="text-sm text-orange-600">{`KRA Period: ${data.kraPeriod}`}</p>
-                              <p className="text-sm text-orange-500">{`Employee: ${data.employeeName}`}</p>
-                              <p className="text-sm font-medium text-orange-700">{`Points: ${data.points}/${data.maxPoints}`}</p>
-                              <p className="text-sm text-orange-700">{`Percentage: ${data.percentage.toFixed(1)}%`}</p>
-                              <p className="text-xs text-orange-600">{`Weight: ${data.weight}%`}</p>
+                          <div 
+                            className="bg-white/95 p-3 border border-gray-200 rounded-lg shadow-lg max-w-sm fixed z-50"
+                            style={{
+                              left: `${coordinate.x - 150}px`, // Center horizontally around cursor
+                              top: isLowerHalf ? '20px' : 'auto', // Top area if cursor in lower half
+                              bottom: isLowerHalf ? 'auto' : '20px', // Bottom area if cursor in upper half
+                              transform: 'translateX(0)', // Remove any default transforms
+                              pointerEvents: 'none' // Prevent tooltip from interfering with mouse events
+                            }}
+                          >
+                            <p className="font-medium text-gray-800 mb-1">{`Goal ${data.goalId}`}</p>
+                            <p className="text-sm text-gray-900 mb-2">{data.goalTitle}</p>
+                            <div className="border-t border-gray-200 pt-2 space-y-1">
+                              <p className="text-sm text-gray-600">{`KRA Period: ${data.kraPeriod}`}</p>
+                              <p className="text-sm text-gray-600">{`Quarter: ${data.quarter}`}</p>
+                              <p className="text-sm text-gray-500">{`Employee: ${data.employeeName}`}</p>
+                              <p className="text-sm font-medium text-gray-700">{`Points: ${data.points}/${data.maxPoints}`}</p>
+                              <p className="text-sm text-gray-700">{`Percentage: ${data.percentage.toFixed(1)}%`}</p>
+                              <p className="text-xs text-gray-600">{`Weight: ${data.weight}%`}</p>
                             </div>
                           </div>
                         );
@@ -757,10 +818,13 @@ export function PerformanceOverview() {
                   <Legend />
                   <Bar 
                     dataKey="points" 
-                    fill="url(#colorGradientSecondary)" 
                     name="Points Awarded"
                     radius={[2, 2, 0, 0]}
-                  />
+                  >
+                    {goalComparisonData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color || '#6b7280'} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -781,63 +845,74 @@ export function PerformanceOverview() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Goal Progression Over Time
+            Goal Points Progression
           </CardTitle>
           <CardDescription>
-            Track how each goal's performance evolves across different KRA periods
+            Track individual goal performance points awarded by managers each quarter
           </CardDescription>
         </CardHeader>
         <CardContent>
           {progressionData.chartData.length > 0 && progressionData.goalsList.length > 0 ? (
-            <div className="h-96">
+            <>
+              {/* Debug info - remove in production */}
+              {/* <div className="mb-4 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                <p>Chart Data Points: {progressionData.chartData.length}</p>
+                <p>Goals: {progressionData.goalsList.length}</p>
+                <p>Goals: {progressionData.goalsList.map(g => g.goalTitle).join(', ')}</p>
+              </div> */}
+              {/* Legend outside chart for better space utilization */}
+              <div className="mb-4 flex flex-wrap gap-3">
+                {progressionData.goalsList.map(goal => (
+                  <div key={goal.goalId} className="flex items-center gap-2 text-sm">
+                    <div 
+                      className="w-4 h-1 rounded"
+                      style={{ backgroundColor: goal.color }}
+                    />
+                    <span className="text-gray-700">
+                      {goal.goalTitle.length > 25 ? goal.goalTitle.substring(0, 25) + '...' : goal.goalTitle}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart 
                   data={progressionData.chartData} 
-                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                  margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                 >
-                  <defs>
-                    {progressionData.goalsList.map(goal => (
-                      <linearGradient key={`gradient-${goal.goalId}`} id={`lineGradient-${goal.goalId}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={goal.color} stopOpacity={0.8} />
-                        <stop offset="100%" stopColor={goal.color} stopOpacity={0.3} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" opacity={0.3} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" opacity={0.7} />
                   <XAxis 
                     dataKey="kraSheet" 
                     angle={-45}
                     textAnchor="end"
                     height={60}
                     fontSize={11}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <YAxis 
-                    domain={[0, 100]}
-                    label={{ value: 'Performance %', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#ea580c' } }}
-                    stroke="#ea580c"
-                    tick={{ fill: '#ea580c' }}
+                    domain={[0, 'dataMax']}
+                    label={{ value: 'Points Awarded', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#000000' } }}
+                    stroke="#000000"
+                    tick={{ fill: '#000000' }}
                   />
                   <Tooltip 
                     content={({ active, payload, label }) => {
                       if (active && payload && payload.length) {
                         return (
-                          <div className="bg-white/95 p-3 border border-orange-200 rounded-lg shadow-lg shadow-orange-100/50 max-w-xs">
-                            <p className="font-medium text-orange-800 mb-2">{`KRA Period: ${label}`}</p>
+                          <div className="bg-white/95 p-3 border border-gray-200 rounded-lg shadow-lg max-w-xs">
+                            <p className="font-medium text-gray-800 mb-2">{`Period: ${label}`}</p>
                             {payload.map((entry: any, index: number) => {
                               const goalId = entry.dataKey;
-                              const goalTitle = entry.payload[`${goalId}_goalTitle`] || goalId;
-                              const points = entry.payload[`${goalId}_points`] || 0;
-                              const maxPoints = entry.payload[`${goalId}_maxPoints`] || 0;
+                              const quarterMaxMarks = entry.payload[`${goalId}_quarterMaxMarks`] || 0;
                               
                               return (
                                 <div key={index} className="mb-1">
                                   <p className="text-sm font-medium" style={{ color: entry.color }}>
-                                    {goalTitle}
+                                    {goalId}
                                   </p>
-                                  <p className="text-xs text-orange-700">
-                                    {`${entry.value?.toFixed(1)}% (${points}/${maxPoints} points)`}
+                                  <p className="text-xs text-gray-700">
+                                    {`Points: ${entry.value}/${quarterMaxMarks}`}
                                   </p>
                                 </div>
                               );
@@ -848,29 +923,35 @@ export function PerformanceOverview() {
                       return null;
                     }}
                   />
-                  <Legend 
-                    wrapperStyle={{ paddingTop: '20px' }}
-                    formatter={(value) => {
-                      const goal = progressionData.goalsList.find(g => g.goalId === value);
-                      return goal ? goal.goalTitle : value;
-                    }}
-                  />
                   {progressionData.goalsList.map(goal => (
                     <Line
                       key={goal.goalId}
                       type="monotone"
                       dataKey={goal.goalId}
                       stroke={goal.color}
-                      strokeWidth={2}
-                      dot={{ fill: goal.color, r: 4 }}
-                      activeDot={{ r: 6 }}
+                      strokeWidth={4}
+                      dot={{ 
+                        fill: goal.color, 
+                        r: 6, 
+                        stroke: '#ffffff', 
+                        strokeWidth: 2,
+                        fillOpacity: 1
+                      }}
+                      activeDot={{ 
+                        r: 10, 
+                        stroke: goal.color, 
+                        strokeWidth: 3,
+                        fill: '#ffffff',
+                        fillOpacity: 1
+                      }}
                       connectNulls={false}
                       name={goal.goalId}
                     />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-            </div>
+              </div>
+            </>
           ) : (
             <div className="flex items-center justify-center h-48 text-muted-foreground">
               <div className="text-center">

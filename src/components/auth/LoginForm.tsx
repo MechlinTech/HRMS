@@ -326,7 +326,7 @@ export function LoginForm() {
             </Button> */}
           </div>
           
-          {/* <div className="relative">
+          <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -337,7 +337,7 @@ export function LoginForm() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="email" className='mb-2'>Email</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -349,7 +349,7 @@ export function LoginForm() {
             </div>
 
             <div>
-              <Label htmlFor="password" className='mb-2'>Password</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -374,7 +374,7 @@ export function LoginForm() {
             >
               Don't have an account? Sign up
             </Button>
-          </div> */}
+          </div>
         </CardContent>
       </Card>
     </div>

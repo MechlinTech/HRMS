@@ -8,7 +8,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: hrms-frontend
     ports:
-      - "5173:80"
+      - "5555:80"
     environment:
       # Supabase Configuration
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
@@ -17,10 +17,10 @@ services:
       # Azure AD Configuration
       - VITE_AZURE_CLIENT_ID=${VITE_AZURE_CLIENT_ID}
       - VITE_AZURE_TENANT_ID=${VITE_AZURE_TENANT_ID}
-      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:5173}
+      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:5555}
       
       # API Configuration
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5173/api}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5555/api}
       - NODE_ENV=production
     volumes:
       - nginx_logs:/var/log/nginx

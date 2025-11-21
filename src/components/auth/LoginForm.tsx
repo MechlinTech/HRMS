@@ -374,9 +374,9 @@ export function LoginForm() {
             >
               Don't have an account? Sign up
             </Button>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
-    </div>*/}
+    </div>
   );
 }

@@ -36,6 +36,7 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5555,
     allowedHosts: ['hrms.mechlintech.com'],
   },
 });

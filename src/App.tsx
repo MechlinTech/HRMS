@@ -286,7 +286,7 @@ function AppRoutes() {
             <BillingLogs />
           </Suspense>
         } />
-        <Route path="finance" element={
+        {/* <Route path="finance" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <FinanceDashboard />
           </Suspense>
@@ -310,7 +310,7 @@ function AppRoutes() {
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <PayrollLogs />
           </Suspense>
-        } /> 
+        } />  */}
         <Route path="ats" element={
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <ATSDashboard />

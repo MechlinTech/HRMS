@@ -28,10 +28,11 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # --- BUILD IMAGE ---
+      # --- BUILD IMAGE (NO CACHE) ---
       - name: Build Docker Image (React + Nginx)
         run: |
           docker build `
+            --no-cache `
             -f docker/Dockerfile `
             -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest `
             .
@@ -40,8 +41,24 @@ jobs:
       - name: Push Image to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest
 
-      # --- DEPLOY USING DOCKER COMPOSE ---
+      # --- STOP OLD CONTAINERS ---
+      - name: Stop and Remove Old Containers
+        run: |
+          docker compose -f docker/docker-compose.yml down
+        continue-on-error: true
+
+      # --- REMOVE OLD IMAGE TO FORCE FRESH PULL ---
+      - name: Remove Old Local Image
+        run: |
+          docker image rm -f ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest
+        continue-on-error: true
+
+      # --- PULL LATEST IMAGE ---
+      - name: Pull Latest Image from Docker Hub
+        run: |
+          docker compose -f docker/docker-compose.yml pull
+
+      # --- DEPLOY WITH FRESH IMAGE ---
       - name: Deploy with Docker Compose
         run: |
-          cd "C:/Users/AI-Agent/Desktop/HRMS-PROD/HRMS/docker"
-          docker compose -f docker-compose.yml up -d --force-recreate
+          docker compose -f docker/docker-compose.yml up -d --force-recreate

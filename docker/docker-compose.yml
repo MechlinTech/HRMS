@@ -13,6 +13,8 @@ services:
       # API Configuration
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5555/api}
       - NODE_ENV=production
+      - VITE_SECOND_SUPABASE_ANON_KEY=${VITE_SECOND_SUPABASE_ANON_KEY}
+      - VITE_SECOND_SUPABASE_URL=${VITE_SECOND_SUPABASE_URL}
 
     volumes:
       - nginx_logs:/var/log/nginx

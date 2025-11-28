@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # HRMS Frontend (React + Nginx inside container)
   hrms-frontend:
-    image: akshatpareek/hrms-frontend:latest    # Pull latest from Docker Hub
+    image: akshatpareek/hrms-frontend:latest
     container_name: hrms-frontend
     ports:
       - "5555:80"
@@ -11,12 +9,7 @@ services:
       # Supabase Configuration
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-      
-      # Azure AD Configuration
-      - VITE_AZURE_CLIENT_ID=${VITE_AZURE_CLIENT_ID}
-      - VITE_AZURE_TENANT_ID=${VITE_AZURE_TENANT_ID}
-      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:5555}
-      
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}
       # API Configuration
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5555/api}
       - NODE_ENV=production
@@ -26,7 +19,7 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3

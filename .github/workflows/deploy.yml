@@ -28,11 +28,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # --- BUILD IMAGE (NO CACHE) ---
+      # --- BUILD IMAGE (NO CACHE) WITH BUILD ARGS ---
       - name: Build Docker Image (React + Nginx)
         run: |
           docker build `
             --no-cache `
+            --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" `
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" `
+            --build-arg MICROSOFT_CLIENT_SECRET="${{ secrets.MICROSOFT_CLIENT_SECRET }}" `
             -f docker/Dockerfile `
             -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest `
             .
@@ -41,10 +44,11 @@ jobs:
       - name: Push Image to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest
 
-      # --- STOP OLD CONTAINERS ---
-      - name: Stop and Remove Old Containers
+      # --- STOP OLD CONTAINERS & REMOVE NETWORK ---
+      - name: Stop Containers and Remove Network
         run: |
-          docker compose -f docker/docker-compose.yml down
+          docker compose -f docker/docker-compose.yml down --remove-orphans
+          docker network prune -f
         continue-on-error: true
 
       # --- REMOVE OLD IMAGE TO FORCE FRESH PULL ---

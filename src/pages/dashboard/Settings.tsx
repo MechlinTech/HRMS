@@ -185,14 +185,14 @@ export function Settings() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className={`grid w-full ${user?.role?.name === 'admin' || user?.role?.name === 'super_admin' || user?.isSA ? 'grid-cols-1' : 'grid-cols-1'}`}>
+        <TabsList className={`grid w-full ${user?.role?.name === 'admin' || user?.role?.name === 'super_admin' || user?.isSA ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <TabsTrigger value="profile">Profile</TabsTrigger> 
-          {/* {(user?.role?.name === 'admin' || user?.role?.name === 'super_admin' || user?.isSA) && (
+          {(user?.role?.name === 'admin' || user?.role?.name === 'super_admin' || user?.isSA) && (
             <TabsTrigger value="email-test">
               <Mail className="mr-2 h-4 w-4" />
               Email Test
             </TabsTrigger>
-          )} */}
+          )}
           {/* <TabsTrigger value="security">Security</TabsTrigger> */}
           {/* <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger> */}

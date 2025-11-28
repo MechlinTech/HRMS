@@ -34,7 +34,9 @@ jobs:
           docker build `
             --no-cache `
             --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" `
-            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" `
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" `  
+            --build-arg VITE_SECOND_SUPABASE_ANON_KEY="${{ secrets.VITE_SECOND_SUPABASE_ANON_KEY }}" `
+            --build-arg VITE_SECOND_SUPABASE_URL="${{ secrets.VITE_SECOND_SUPABASE_URL }}" `
             --build-arg MICROSOFT_CLIENT_SECRET="${{ secrets.MICROSOFT_CLIENT_SECRET }}" `
             -f docker/Dockerfile `
             -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest `

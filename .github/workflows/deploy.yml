@@ -4,10 +4,32 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
+
+  # ------------------------------------------
+  # JOB 1: TEST BUILD (runs on PR)
+  # ------------------------------------------
+  test-build:
+    runs-on: self-hosted
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Test Docker Build (React + Nginx)
+        run: docker build -f docker/Dockerfile -t test-hrms-build .
+
+  # ------------------------------------------
+  # JOB 2: REAL DEPLOYMENT (only on push to main)
+  # ------------------------------------------
   deploy:
     runs-on: self-hosted
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout Code
@@ -20,15 +42,10 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build Docker Image (React + Nginx)
-        run: |
-          docker build \
-            -f docker/Dockerfile \
-            -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest \
-            .
+        run: docker build -f docker/Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest .
 
       - name: Push Image to Docker Hub
-        run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest
 
       - name: Deploy with Docker Compose
         run: |

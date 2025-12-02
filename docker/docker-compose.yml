@@ -1,40 +1,30 @@
-version: '3.8'
-
 services:
-  # HRMS Frontend Application
+  # HRMS Frontend (React + Nginx inside container)
   hrms-frontend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: akshatpareek/hrms-frontend:latest
     container_name: hrms-frontend
     ports:
       - "5555:80"
     environment:
-      # Supabase Configuration
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-      
-      # Azure AD Configuration
-      - VITE_AZURE_CLIENT_ID=${VITE_AZURE_CLIENT_ID}
-      - VITE_AZURE_TENANT_ID=${VITE_AZURE_TENANT_ID}
-      - VITE_AZURE_REDIRECT_URI=${VITE_AZURE_REDIRECT_URI:-http://localhost:5555}
-      
       # API Configuration
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5555/api}
       - NODE_ENV=production
+
     volumes:
       - nginx_logs:/var/log/nginx
     restart: unless-stopped
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
     networks:
       - hrms-network
 
-  # PostgreSQL Database (Alternative to Supabase for local development)
+  # PostgreSQL Database (Only for local development)
   postgres:
     image: postgres:15-alpine
     container_name: hrms-postgres
@@ -48,16 +38,18 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrms_user} -d ${POSTGRES_DB:-hrms_db}"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
+
     networks:
       - hrms-network
 
-  # Nginx Reverse Proxy (Optional - for production setup)
+  # Nginx Reverse Proxy (Optional for real production SSL)
   nginx-proxy:
     image: nginx:alpine
     container_name: hrms-nginx-proxy
@@ -76,6 +68,7 @@ services:
     profiles:
       - production
 
+# VOLUMES
 volumes:
   postgres_data:
     driver: local
@@ -84,9 +77,10 @@ volumes:
   proxy_logs:
     driver: local
 
+# NETWORKS
 networks:
   hrms-network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.50.0.0/16

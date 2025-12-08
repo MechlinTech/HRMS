@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAllLeaveApplications, useUpdateLeaveApplicationStatus, useLeaveApplicationPermissions } from '@/hooks/useLeaveManagement';
 import { useWithdrawLeaveApplication } from '@/hooks/useLeave';
-import { useAllEmployeesLeaveBalancesWithManager, useAdjustLeaveBalance, useLeaveBalanceAdjustments } from '@/hooks/useLeaveBalanceManagement';
+import { useAllEmployeesLeaveBalancesWithManager, useAdjustLeaveBalance, useAdjustCompOffBalance, useLeaveBalanceAdjustments, useUpdateLeaveBalance, useCronSettings, useCreateOrUpdateCronSettings, useTriggerMonthlyAllocation, useManageCronJob } from '@/hooks/useLeaveBalanceManagement';
 import { useLeaveWithdrawalLogs } from '@/hooks/useLeave';
 // import { useRecalculateAllApprovedLeaveBalances } from '@/hooks/useSandwichLeave';
 import { useHolidays, useCreateHoliday, useDeleteHoliday } from '@/hooks/useHolidays';
 import { useEmployeePermissions } from '@/hooks/useEmployeePermissions';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useEmploymentTermLeaveRates } from '@/hooks/useEmploymentTermLeaveRates';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Calendar,
   Filter,
@@ -39,7 +41,9 @@ import {
   Info,
   RotateCcw,
   CalendarPlus,
-  Trash2
+  Trash2,
+  Settings,
+  Play
 } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -53,6 +57,31 @@ import {
 import { toast } from 'sonner';
 
 // Helper functions
+// Helper function to format days for display (always show 1 decimal place, but don't round)
+const formatDaysForDisplay = (days: number): string => {
+  // Parse to ensure we have a valid number, then format to 1 decimal place
+  const num = Number(days);
+  if (isNaN(num)) return '0.0';
+  // Use toFixed(1) to show one decimal place, but the actual value isn't rounded
+  return num.toFixed(1);
+};
+
+// Helper function to restrict input to one decimal place
+const restrictToOneDecimal = (value: string): string => {
+  // Remove any characters that aren't digits or decimal point
+  let cleaned = value.replace(/[^\d.]/g, '');
+  // Only allow one decimal point
+  const parts = cleaned.split('.');
+  if (parts.length > 2) {
+    cleaned = parts[0] + '.' + parts.slice(1).join('');
+  }
+  // Restrict to one decimal place
+  if (parts.length === 2 && parts[1].length > 1) {
+    cleaned = parts[0] + '.' + parts[1].substring(0, 1);
+  }
+  return cleaned;
+};
+
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'approved':
@@ -180,7 +209,7 @@ function LeaveApplicationActions({ application }: { application: any }) {
               <div>
                 <p className="font-medium">Duration:</p>
                 <p className="text-muted-foreground">
-                  {application.days_count} days
+                  {formatDaysForDisplay(Number(application.days_count))} days
                   {application.is_half_day && (
                     <span className="ml-2 text-blue-600">
                       ({application.half_day_period === '1st_half' ? '1st half' : 
@@ -237,7 +266,7 @@ function LeaveApplicationActions({ application }: { application: any }) {
                                 )}>
                                   <div className="flex justify-between text-sm">
                                     <span>Actual Working Days:</span>
-                                    <span className="font-medium">{application.days_count}</span>
+                                    <span className="font-medium">{formatDaysForDisplay(Number(application.days_count))}</span>
                                   </div>
                                   <div className="flex justify-between text-sm">
                                     <span>Days Deducted from Balance:</span>
@@ -245,14 +274,14 @@ function LeaveApplicationActions({ application }: { application: any }) {
                                       "font-medium",
                                       application.is_sandwich_leave ? "text-orange-700" : "text-blue-700"
                                     )}>
-                                      {application.sandwich_deducted_days || application.days_count}
+                                      {formatDaysForDisplay(Number(application.sandwich_deducted_days || application.days_count))}
                                     </span>
                                   </div>
                                   {application.sandwich_deducted_days && application.sandwich_deducted_days !== application.days_count && (
                                     <div className="flex justify-between text-sm">
                                       <span>Additional Deduction:</span>
                                       <span className="font-medium text-red-600">
-                                        +{(application.sandwich_deducted_days - application.days_count).toFixed(1)} days
+                                        +{formatDaysForDisplay(Number(application.sandwich_deducted_days) - Number(application.days_count))} days
                                       </span>
                                     </div>
                                   )}
@@ -316,7 +345,7 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   <div>
                     <span className="font-medium">Duration:</span>
                     <span className="ml-2">
-                      {application.days_count} days
+                      {formatDaysForDisplay(Number(application.days_count))} days
                       {application.is_half_day && (
                         <span className="ml-2 text-blue-600 text-xs">
                           ({application.half_day_period === '1st_half' ? '1st half' : 
@@ -418,7 +447,7 @@ function LeaveApplicationActions({ application }: { application: any }) {
                   <div>
                     <span className="font-medium">Duration:</span>
                     <span className="ml-2">
-                      {application.days_count} days
+                      {formatDaysForDisplay(Number(application.days_count))} days
                       {application.is_half_day && (
                         <span className="ml-2 text-blue-600 text-xs">
                           ({application.half_day_period === '1st_half' ? '1st half' : 
@@ -505,16 +534,565 @@ function LeaveApplicationActions({ application }: { application: any }) {
   );
 }
 
+// Component for editing rate of leave
+function RateOfLeaveEditor({ balance, currentRate }: { balance: any; currentRate: number }) {
+  const [rate, setRate] = useState(currentRate.toString());
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const updateLeaveBalance = useUpdateLeaveBalance();
+  const queryClient = useQueryClient();
+
+  const handleSave = async () => {
+    const rateValue = parseFloat(rate);
+    if (isNaN(rateValue) || rateValue < 0) {
+      toast.error('Please enter a valid rate (must be >= 0)');
+      return;
+    }
+
+    const userId = balance.user_id || balance.user?.id;
+    if (!userId) {
+      toast.error('User ID not found. Please refresh the page.');
+      return;
+    }
+
+    // Try to get balance_id first
+    let balanceId = balance.balance_id || balance.id;
+    
+    if (balanceId) {
+      // We have balance_id, use the standard update
+      updateLeaveBalance.mutate({
+        balanceId: balanceId,
+        updates: {
+          rate_of_leave: rateValue
+        }
+      }, {
+        onSuccess: () => {
+          setIsDialogOpen(false);
+          queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+        },
+        onError: (error: any) => {
+          // If update fails, try using user_id method
+          if (error?.code === 'PGRST116' || error?.message?.includes('not found')) {
+            handleSaveByUserId(userId, rateValue);
+          }
+        }
+      });
+    } else {
+      // No balance_id, use user_id method
+      handleSaveByUserId(userId, rateValue);
+    }
+  };
+
+  const handleSaveByUserId = async (userId: string, rateValue: number) => {
+    try {
+      const { leaveApi } = await import('@/services/api');
+      await leaveApi.updateLeaveBalanceRateByUserId(userId, rateValue);
+      setIsDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+      toast.success('Rate of leave updated successfully');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update rate of leave');
+      console.error('Error updating rate of leave:', error);
+    }
+  };
+
+  return (
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto p-1"
+          onClick={() => {
+            setRate(currentRate.toString());
+            setIsDialogOpen(true);
+          }}
+        >
+          <div className="text-center">
+            <div className="font-medium">{currentRate.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">days/month</div>
+          </div>
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Rate of Leave</DialogTitle>
+          <DialogDescription>
+            Set the monthly leave allocation rate for {balance.full_name}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="rate-of-leave">Rate of Leave (days per month)</Label>
+            <Input
+              id="rate-of-leave"
+              type="number"
+              step="0.01"
+              min="0"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              placeholder="0.00"
+              className="mt-2"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              This is the number of leave days that will be added to the employee's balance each month.
+            </p>
+          </div>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              The monthly allocation will be processed automatically by the cron job based on the configured schedule.
+            </AlertDescription>
+          </Alert>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSave}
+              disabled={updateLeaveBalance.isPending}
+            >
+              {updateLeaveBalance.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Component for Cron Settings Tab
+function CronSettingsTab() {
+  const { data: cronSettings, isLoading, refetch } = useCronSettings();
+  const createOrUpdateSettings = useCreateOrUpdateCronSettings();
+  const triggerAllocation = useTriggerMonthlyAllocation();
+  const manageCronJob = useManageCronJob();
+  const [cronSchedule, setCronSchedule] = useState('0 0 1 * *'); // Default: 1st day of month at midnight
+  const [endDate, setEndDate] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Refetch cron settings after manual trigger to get updated last_run_at
+  useEffect(() => {
+    if (triggerAllocation.isSuccess) {
+      // Wait a bit for the database to update, then refetch
+      const timer = setTimeout(() => {
+        refetch();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [triggerAllocation.isSuccess, refetch]);
+
+  // Load existing settings when available
+  useEffect(() => {
+    if (cronSettings) {
+      setCronSchedule(cronSettings.cron_schedule || '0 0 1 * *');
+      setEndDate(cronSettings.end_date || '');
+      setIsActive(cronSettings.is_active ?? true);
+    }
+  }, [cronSettings]);
+
+  const handleSave = () => {
+    if (!endDate) {
+      toast.error('Please set an end date');
+      return;
+    }
+
+    // Validate cron schedule
+    const validation = validateCronSchedule(cronSchedule);
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid cron schedule format');
+      return;
+    }
+
+    createOrUpdateSettings.mutate({
+      cron_schedule: cronSchedule.trim(),
+      end_date: endDate,
+      is_active: isActive
+    }, {
+      onSuccess: () => {
+        setIsDialogOpen(false);
+        // Automatically manage the pg_cron job after saving settings
+        if (isActive) {
+          manageCronJob.mutate();
+        } else {
+          // If inactive, unschedule the job
+          manageCronJob.mutate();
+        }
+      }
+    });
+  };
+
+  const handleTriggerNow = () => {
+    if (!confirm('Are you sure you want to trigger monthly leave allocation now? This will allocate leave to all employees with rate_of_leave > 0.')) {
+      return;
+    }
+    triggerAllocation.mutate();
+  };
+
+  // Validate cron schedule format (standard Unix cron: 5 fields)
+  const validateCronSchedule = (schedule: string): { valid: boolean; error?: string } => {
+    const parts = schedule.trim().split(/\s+/);
+    
+    if (parts.length !== 5) {
+      return {
+        valid: false,
+        error: `Invalid format. Expected 5 fields (minute hour day month weekday), got ${parts.length}. Example: "0 0 1 * *" (1st day of month at midnight)`
+      };
+    }
+    
+    // Helper function to validate a cron field
+    const validateCronField = (
+      field: string, 
+      fieldName: string, 
+      min: number, 
+      max: number, 
+      allowWildcard: boolean = true
+    ): { valid: boolean; error?: string } => {
+      if (field === '*' && allowWildcard) {
+        return { valid: true };
+      }
+      
+      // Check for step expressions (e.g., */2, 0-59/5)
+      if (field.includes('/')) {
+        const [range, step] = field.split('/');
+        const stepNum = parseInt(step);
+        if (isNaN(stepNum) || stepNum < 1) {
+          return { valid: false, error: `${fieldName} step value must be a positive number` };
+        }
+        
+        // If range is *, it's valid
+        if (range === '*') {
+          return { valid: true };
+        }
+        
+        // Check for range (e.g., 0-59/5)
+        if (range.includes('-')) {
+          const [start, end] = range.split('-').map(n => parseInt(n));
+          if (isNaN(start) || isNaN(end) || start < min || end > max || start > end) {
+            return { valid: false, error: `${fieldName} range must be ${min}-${max}` };
+          }
+          return { valid: true };
+        }
+        
+        // Single number with step (e.g., 0/5)
+        const num = parseInt(range);
+        if (isNaN(num) || num < min || num > max) {
+          return { valid: false, error: `${fieldName} must be ${min}-${max} or *` };
+        }
+        return { valid: true };
+      }
+      
+      // Check for ranges (e.g., 0-59)
+      if (field.includes('-')) {
+        const [start, end] = field.split('-').map(n => parseInt(n));
+        if (isNaN(start) || isNaN(end) || start < min || end > max || start > end) {
+          return { valid: false, error: `${fieldName} range must be ${min}-${max}` };
+        }
+        return { valid: true };
+      }
+      
+      // Check for lists (e.g., 0,5,10)
+      if (field.includes(',')) {
+        const values = field.split(',').map(n => parseInt(n.trim()));
+        for (const val of values) {
+          if (isNaN(val) || val < min || val > max) {
+            return { valid: false, error: `${fieldName} values must be ${min}-${max}` };
+          }
+        }
+        return { valid: true };
+      }
+      
+      // Single number
+      const num = parseInt(field);
+      if (isNaN(num) || num < min || num > max) {
+        return { valid: false, error: `${fieldName} must be ${min}-${max} or *` };
+      }
+      return { valid: true };
+    };
+    
+    const [minute, hour, day, month, weekday] = parts;
+    
+    // Validate each field
+    const minuteValidation = validateCronField(minute, 'Minute', 0, 59);
+    if (!minuteValidation.valid) return minuteValidation;
+    
+    const hourValidation = validateCronField(hour, 'Hour', 0, 23);
+    if (!hourValidation.valid) return hourValidation;
+    
+    const dayValidation = validateCronField(day, 'Day', 1, 31);
+    if (!dayValidation.valid) return dayValidation;
+    
+    const monthValidation = validateCronField(month, 'Month', 1, 12);
+    if (!monthValidation.valid) return monthValidation;
+    
+    const weekdayValidation = validateCronField(weekday, 'Weekday', 0, 7);
+    if (!weekdayValidation.valid) return weekdayValidation;
+    
+    return { valid: true };
+  };
+
+  // Parse cron schedule for display
+  const parseCronSchedule = (schedule: string) => {
+    const validation = validateCronSchedule(schedule);
+    if (!validation.valid) {
+      return validation.error || 'Invalid schedule';
+    }
+    
+    const parts = schedule.trim().split(/\s+/);
+    const [minute, hour, day, month, weekday] = parts;
+    
+    let description = '';
+    if (day !== '*' && month === '*') {
+      description = `Day ${day} of every month at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    } else if (weekday !== '*' && day === '*' && month === '*') {
+      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayIndex = parseInt(weekday) === 7 ? 0 : parseInt(weekday);
+      description = `Every ${weekdays[dayIndex]} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    } else if (day === '*' && month === '*' && weekday === '*') {
+      description = `Every day at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    } else {
+      description = `Custom schedule: ${schedule}`;
+    }
+    
+    return description;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <LoadingSpinner size="md" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Monthly Leave Allocation Cron Settings
+            </CardTitle>
+            <CardDescription>
+              Configure the automated monthly leave allocation system
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleTriggerNow}
+              disabled={triggerAllocation.isPending}
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {triggerAllocation.isPending ? 'Running...' : 'Trigger Now'}
+            </Button>
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              {cronSettings ? 'Update Settings' : 'Configure Settings'}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {cronSettings ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm font-medium">Cron Schedule</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                  <div className="font-mono text-sm">{cronSettings.cron_schedule}</div>
+                  <div className={cn(
+                    "text-xs mt-1",
+                    validateCronSchedule(cronSettings.cron_schedule).valid 
+                      ? "text-muted-foreground" 
+                      : "text-red-600 font-medium"
+                  )}>
+                    {parseCronSchedule(cronSettings.cron_schedule)}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">End Date</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                  <div className="text-sm">{formatDateForDisplay(cronSettings.end_date, 'MMM dd, yyyy')}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Cron job will stop running after this date
+                  </div>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Status</Label>
+                <div className="mt-1">
+                  <Badge className={cronSettings.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    {cronSettings.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              </div>
+              {/* <div>
+                <Label className="text-sm font-medium">Last Run</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                  <div className="text-sm">
+                    {cronSettings.last_run_at 
+                      ? formatDateForDisplay(cronSettings.last_run_at, 'MMM dd, yyyy HH:mm')
+                      : 'Never'}
+                  </div>
+                </div>
+              </div> */}
+              {/* <div>
+                <Label className="text-sm font-medium">Next Run</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                  <div className="text-sm">
+                    {cronSettings.next_run_at 
+                      ? formatDateForDisplay(cronSettings.next_run_at, 'MMM dd, yyyy HH:mm')
+                      : 'Not scheduled'}
+                  </div>
+                  {cronSettings.next_run_at && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {new Date(cronSettings.next_run_at) > new Date() 
+                        ? `In ${Math.ceil((new Date(cronSettings.next_run_at).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days`
+                        : 'Overdue'}
+                    </div>
+                  )}
+                </div>
+              </div> */}
+            </div>
+            
+            {/* <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Note:</strong> The cron job uses Supabase's pg_cron extension to automatically run the allocation function. 
+                The job will automatically allocate leave to all employees with a &quot;Rate of Leave&quot; &gt; 0 according to the schedule above. 
+                The job will stop running after the end date to allow for rate updates before the next cycle.
+                {cronSettings.is_active && (
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => manageCronJob.mutate()}
+                      disabled={manageCronJob.isPending}
+                    >
+                      {manageCronJob.isPending ? 'Updating...' : 'Update Cron Job Schedule'}
+                    </Button>
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert> */}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Cron Settings Configured</h3>
+            <p className="text-muted-foreground mb-4">
+              Configure the monthly leave allocation cron job to automatically allocate leave to employees.
+            </p>
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Configure Settings
+            </Button>
+          </div>
+        )}
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Configure Cron Settings</DialogTitle>
+              <DialogDescription>
+                Set the schedule and end date for the monthly leave allocation cron job
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="cron-schedule">Cron Schedule (Standard Unix Format)</Label>
+                <Input
+                  id="cron-schedule"
+                  value={cronSchedule}
+                  onChange={(e) => setCronSchedule(e.target.value)}
+                  placeholder="0 0 1 * *"
+                  className={cn(
+                    "mt-2 font-mono",
+                    cronSchedule && !validateCronSchedule(cronSchedule).valid && "border-red-500"
+                  )}
+                />
+                {cronSchedule && !validateCronSchedule(cronSchedule).valid && (
+                  <p className="text-xs text-red-600 mt-1">
+                    {validateCronSchedule(cronSchedule).error}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Format: minute hour day month weekday (5 fields, space-separated)
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="end-date">End Date</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="mt-2"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  The cron job will stop running after this date. This allows you to update leave rates before the next cycle.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is-active"
+                  checked={isActive}
+                  onCheckedChange={(checked) => setIsActive(checked === true)}
+                />
+                <Label htmlFor="is-active">Active</Label>
+                <p className="text-xs text-muted-foreground ml-2">
+                  Enable or disable the cron job
+                </p>
+              </div>
+
+              {/* <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Automatic Scheduling:</strong> This system uses Supabase's pg_cron extension to automatically schedule the job. 
+                  After saving settings, the cron job will be automatically scheduled/updated. 
+                  Make sure the pg_cron extension is enabled in your Supabase project.
+                  <br /><br />
+                  <strong>Alternative:</strong> If pg_cron is not available, you can use an external cron service to call the edge function at: 
+                  <code className="text-xs">/functions/v1/monthly-leave-allocation</code>
+                </AlertDescription>
+              </Alert> */}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSave}
+                  disabled={!endDate || createOrUpdateSettings.isPending}
+                >
+                  {createOrUpdateSettings.isPending ? 'Saving...' : 'Save Settings'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Component for leave balance adjustment dialog
 function LeaveBalanceAdjustment({ employee, onClose, onSuccess }: { 
   employee: any; 
   onClose: () => void;
   onSuccess?: () => void;
 }) {
+  const [balanceType, setBalanceType] = useState<'leave_balance' | 'comp_off_balance'>('leave_balance');
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const adjustBalance = useAdjustLeaveBalance();
+  const adjustCompOffBalance = useAdjustCompOffBalance();
   const queryClient = useQueryClient();
 
   const handleAdjustment = () => {
@@ -526,38 +1104,80 @@ function LeaveBalanceAdjustment({ employee, onClose, onSuccess }: {
       return;
     }
 
-    adjustBalance.mutate({
-      userId: employee.user_id,
-      adjustment: {
-        type: adjustmentType,
-        amount: parseFloat(amount),
-        reason
-      }
-    }, {
-      onSuccess: () => {
-        // Invalidate and refetch all relevant queries
-        queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
-        queryClient.invalidateQueries({ queryKey: ['leave-balance-adjustments'] });
-        
-        // Call the success callback if provided
-        onSuccess?.();
-        
-        // Close the dialog and reset form
-        onClose();
-        setAmount('');
-        setReason('');
-      }
-    });
+    if (balanceType === 'comp_off_balance') {
+      adjustCompOffBalance.mutate({
+        userId: employee.user_id,
+        adjustment: {
+          type: adjustmentType,
+          amount: parseFloat(amount),
+          reason
+        }
+      }, {
+        onSuccess: () => {
+          // Invalidate and refetch all relevant queries
+          queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+          queryClient.invalidateQueries({ queryKey: ['leave-balance-adjustments'] });
+          
+          // Call the success callback if provided
+          onSuccess?.();
+          
+          // Close the dialog and reset form
+          onClose();
+          setAmount('');
+          setReason('');
+        }
+      });
+    } else {
+      adjustBalance.mutate({
+        userId: employee.user_id,
+        adjustment: {
+          type: adjustmentType,
+          amount: parseFloat(amount),
+          reason
+        }
+      }, {
+        onSuccess: () => {
+          // Invalidate and refetch all relevant queries
+          queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+          queryClient.invalidateQueries({ queryKey: ['leave-balance-adjustments'] });
+          
+          // Call the success callback if provided
+          onSuccess?.();
+          
+          // Close the dialog and reset form
+          onClose();
+          setAmount('');
+          setReason('');
+        }
+      });
+    }
   };
+
+  const isProcessing = balanceType === 'comp_off_balance' 
+    ? adjustCompOffBalance.isPending 
+    : adjustBalance.isPending;
 
   return (
     <div className="space-y-4">
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          This adjustment will be applied to the employee's main leave balance pool.
+          This adjustment will be applied to the employee's {balanceType === 'comp_off_balance' ? 'compensatory off balance' : 'main leave balance pool'}.
         </AlertDescription>
       </Alert>
+
+      <div>
+        <Label>Leave Balance Type</Label>
+        <Select value={balanceType} onValueChange={(value: 'leave_balance' | 'comp_off_balance') => setBalanceType(value)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="leave_balance">Leave Balance</SelectItem>
+            <SelectItem value="comp_off_balance">Comp Off Balance</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <div>
         <Label>Action</Label>
@@ -577,11 +1197,14 @@ function LeaveBalanceAdjustment({ employee, onClose, onSuccess }: {
         <Input
           type="number"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => {
+            const restricted = restrictToOneDecimal(e.target.value);
+            setAmount(restricted);
+          }}
           placeholder="Enter number of days"
-          step="0.5"
-          min="0.5"
-          pattern="\d*\.?\d*"
+          step="0.1"
+          min="0.1"
+          pattern="\d*\.?\d{0,1}"
         />
       </div>
 
@@ -601,9 +1224,9 @@ function LeaveBalanceAdjustment({ employee, onClose, onSuccess }: {
         </Button>
         <Button 
           onClick={handleAdjustment}
-          disabled={!amount || !reason || adjustBalance.isPending}
+          disabled={!amount || !reason || isProcessing}
         >
-          {adjustBalance.isPending ? 'Processing...' : `${adjustmentType === 'add' ? 'Add' : 'Subtract'} ${amount || '0'} Days`}
+          {isProcessing ? 'Processing...' : `${adjustmentType === 'add' ? 'Add' : 'Subtract'} ${amount || '0'} Days`}
         </Button>
       </div>
     </div>
@@ -629,6 +1252,50 @@ export function LeaveManagement() {
   
   // Withdrawal logs data
   const { data: withdrawalLogs, isLoading: withdrawalLogsLoading } = useLeaveWithdrawalLogs();
+  
+  // Employment term leave rates
+  const { data: employmentTermLeaveRates } = useEmploymentTermLeaveRates();
+  
+  // Helper function to get leave rate based on employment term
+  const getLeaveRateByEmploymentTerm = (employmentTerm: string | null): number => {
+    if (!employmentTerm || !employmentTermLeaveRates) return 0;
+    const rateConfig = employmentTermLeaveRates.find(
+      (rate) => rate.employment_term === employmentTerm
+    );
+    return rateConfig?.leave_rate || 0;
+  };
+  
+  // Helper function to format employment term name for display
+  const formatEmploymentTermName = (term: string | null): string => {
+    if (!term) return 'Not Set';
+    const termMap: Record<string, string> = {
+      'full_time': 'Full Time',
+      'part_time': 'Part Time',
+      'associate': 'Associate',
+      'contract': 'Contract',
+      'probation/internship': 'Probation/Internship'
+    };
+    return termMap[term] || term;
+  };
+  
+  // Helper function to get employment term info
+  const getEmploymentTermInfo = (employmentTerm: string | null) => {
+    if (!employmentTerm || !employmentTermLeaveRates) {
+      return {
+        term: 'Not Set',
+        rate: 0,
+        description: 'Employment term not configured'
+      };
+    }
+    const rateConfig = employmentTermLeaveRates.find(
+      (rate) => rate.employment_term === employmentTerm
+    );
+    return {
+      term: formatEmploymentTermName(employmentTerm),
+      rate: rateConfig?.leave_rate || 0,
+      description: rateConfig?.description || `Leave rate for ${formatEmploymentTermName(employmentTerm)} employees`
+    };
+  };
 
   // Filter data based on permissions
   // If user has page access but not employee permissions, grant view access to all
@@ -732,7 +1399,7 @@ export function LeaveManagement() {
         app.leave_type?.name || '',
         app.start_date,
         app.end_date,
-        app.days_count,
+        Number(app.days_count),
         `"${app.reason}"`,
         app.status,
         formatDateForDisplay(app.applied_at, 'yyyy-MM-dd'),
@@ -882,23 +1549,23 @@ export function LeaveManagement() {
       </div>
 
       {/* Enhanced Sandwich Leave System Info */}
-      <Alert className="bg-blue-50 border-blue-200">
+      {/* <Alert className="bg-blue-50 border-blue-200">
         <Info className="h-4 w-4 text-blue-600" />
         <AlertDescription className="text-blue-800">
           <strong>Enhanced Sandwich Leave System Active:</strong> Leave balances are automatically calculated using sandwich leave rules. 
           Friday/Monday patterns, holiday exclusions, and approval-based deductions are now enforced. 
           Use "Recalculate Balances" to update existing approved applications with correct calculations.
         </AlertDescription>
-      </Alert>
+      </Alert> */}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className={`grid w-full ${
           // Managers (who can view team but not all) should only see "Leave Applications" tab
           permissions.canViewAllEmployees 
-            ? 'grid-cols-5' 
+            ? 'grid-cols-6' 
             : permissions.canViewTeamEmployees 
               ? 'grid-cols-1' // Managers only see Leave Applications
-              : 'grid-cols-4' // Regular employees see all except Holidays
+              : 'grid-cols-4' // Regular employees see all except Holidays and Cron Settings
         }`}>
           <TabsTrigger value="applications" className="cursor-pointer">Leave Applications</TabsTrigger>
           {/* Hide Leave Balances, Adjustment History, and Withdrawal Logs for managers */}
@@ -908,6 +1575,7 @@ export function LeaveManagement() {
               <TabsTrigger value="history" className="cursor-pointer">Adjustment History</TabsTrigger>
               <TabsTrigger value="withdrawals" className="cursor-pointer">Withdrawal Logs</TabsTrigger>
               <TabsTrigger value="holidays" className="cursor-pointer">Holidays</TabsTrigger>
+              <TabsTrigger value="cron-settings" className="cursor-pointer">Cron Settings</TabsTrigger>
             </>
           )}
           {/* Regular employees (not managers, not admins) can see balances, history, and withdrawals but not holidays */}
@@ -1123,16 +1791,20 @@ export function LeaveManagement() {
                           </TableCell>
                           <TableCell>
                             <div className="text-center">
-                              <div className="font-medium">{application.days_count}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {application.is_half_day ? (
+                              <div className="font-medium">{formatDaysForDisplay(Number(application.days_count))}</div>
+                              <div className="text-xs text-muted-foreground flex items-center justify-center gap-1 flex-wrap">
+                                {application.is_half_day && (
                                   <span className="text-blue-600">
                                     {application.half_day_period === '1st_half' ? '1st half' : 
                                      application.half_day_period === '2nd_half' ? '2nd half' : 'Half Day'}
                                   </span>
-                                ) : (
-                                  'days'
                                 )}
+                                {application.lop_days && application.lop_days > 0 && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    {application.lop_days} LOP
+                                  </Badge>
+                                )}
+                                {!application.is_half_day && !application.lop_days && 'days'}
                               </div>
                             </div>
                           </TableCell>
@@ -1260,6 +1932,46 @@ export function LeaveManagement() {
             </Card>
           </div>
 
+          {/* Leave Rates Reference Section */}
+          {employmentTermLeaveRates && employmentTermLeaveRates.length > 0 && (
+            <Card className="bg-blue-50/50 border-blue-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Info className="h-4 w-4 text-blue-600" />
+                  Leave Rates by Employment Term - Reference
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Quick reference of leave rates configured for each employment term type
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {employmentTermLeaveRates
+                    .sort((a, b) => {
+                      const order = ['full_time', 'part_time', 'associate', 'contract', 'probation/internship'];
+                      return order.indexOf(a.employment_term) - order.indexOf(b.employment_term);
+                    })
+                    .map((rate) => (
+                      <div
+                        key={rate.employment_term}
+                        className="flex flex-col p-3 bg-white rounded-lg border border-blue-100"
+                      >
+                        <div className="text-sm font-medium text-gray-900 mb-1">
+                          {formatEmploymentTermName(rate.employment_term)}
+                        </div>
+                        <div className="mt-auto">
+                          <div className="text-lg font-bold text-blue-600">
+                            {rate.leave_rate.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">days/month</div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Balance Filters */}
           <Card>
             <CardHeader>
@@ -1269,19 +1981,19 @@ export function LeaveManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <Label htmlFor="employee-name-filter" className='mb-2 ml-2'>Employee Name</Label>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-1 min-w-[200px] max-w-[300px]">
+                  <Label htmlFor="employee-name-filter" className='mb-2'>Employee Name</Label>
                   <Input
                     placeholder="Search employees..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <div>
+                <div className="flex-1 min-w-[200px] max-w-[300px]">
                   <Label htmlFor="balance-filter" className='mb-2'>Balance Status</Label>
                   <Select value={balanceFilter} onValueChange={setBalanceFilter}>
-                    <SelectTrigger >
+                    <SelectTrigger>
                       <SelectValue placeholder="All Balances" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1292,7 +2004,6 @@ export function LeaveManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div></div>
                 <div className='mt-4'>
                   <Button 
                     variant="outline" 
@@ -1333,9 +2044,12 @@ export function LeaveManagement() {
                       <TableHead>Employee</TableHead>
                       <TableHead>Tenure</TableHead>
                       {/* <TableHead>Monthly Rate</TableHead> */}
+                      <TableHead>Rate of Leave</TableHead>
+                      {/* <TableHead>Employment Term</TableHead> */}
                       <TableHead>Allocated</TableHead>
                       <TableHead>Used</TableHead>
                       <TableHead>Remaining</TableHead>
+                      <TableHead>Comp Off Balance</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -1376,6 +2090,48 @@ export function LeaveManagement() {
                             <div className="text-xs text-muted-foreground">days/month</div>
                           </TableCell> */}
                           <TableCell className="text-center">
+                            {(() => {
+                              // Get leave rate from employment term (HR can't configure this)
+                              const employmentTerm = balance.employment_terms || balance.user?.employment_terms;
+                              const leaveRate = getLeaveRateByEmploymentTerm(employmentTerm);
+                              return (
+                                <div>
+                                  <div className="font-medium">{leaveRate.toFixed(2)}</div>
+                                  <div className="text-xs text-muted-foreground">days/month</div>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          {/* <TableCell className="text-center">
+                            {(() => {
+                              const employmentTerm = balance.employment_terms || balance.user?.employment_terms;
+                              const termInfo = getEmploymentTermInfo(employmentTerm);
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center justify-center gap-1 cursor-help">
+                                        <Info className="h-4 w-4 text-muted-foreground" />
+                                        <span className="text-sm font-medium">{termInfo.term}</span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold">{termInfo.term}</div>
+                                        <div className="text-xs">
+                                          <div>Leave Rate: <strong>{termInfo.rate.toFixed(2)} days/month</strong></div>
+                                          {termInfo.description && (
+                                            <div className="mt-1 text-muted-foreground">{termInfo.description}</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            })()}
+                          </TableCell> */}
+                          <TableCell className="text-center">
                             <div className="font-medium">{allocatedDays}</div>
                             <div className="text-xs text-muted-foreground">allocated</div>
                           </TableCell>
@@ -1393,6 +2149,15 @@ export function LeaveManagement() {
                               <div className="text-xs text-muted-foreground">remaining</div>
                             </div>
                           </TableCell>
+                          <TableCell className="text-center">
+                            <div className={cn(
+                              "font-medium",
+                              (balance.comp_off_balance || 0) > 0 ? "text-blue-600" : "text-gray-600"
+                            )}>
+                              <div>{(balance.comp_off_balance || 0).toFixed(1)}</div>
+                              <div className="text-xs text-muted-foreground">comp off</div>
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <div className="space-y-1">
                               {allocatedDays === 0 ? (
@@ -1404,7 +2169,7 @@ export function LeaveManagement() {
                                   {balance.can_carry_forward && (
                                     <Badge variant="secondary" className="text-xs">
                                       Can Carry Forward
-                                    </Badge>
+                                    </Badge>     
                                   )}
                                   {tenureMonths < 9 && (
                                     <Badge variant="outline" className="text-xs text-orange-600">
@@ -1620,7 +2385,7 @@ export function LeaveManagement() {
                                 {log.leave_application?.leave_type?.name}
                               </Badge>
                               <span className="text-sm">
-                                {log.leave_application?.days_count} days
+                                {formatDaysForDisplay(Number(log.leave_application?.days_count || 0))} days
                                 {log.leave_application?.is_half_day && (
                                   <span className="ml-1 text-blue-600 text-xs">
                                     ({log.leave_application?.half_day_period === '1st_half' ? '1st half' : 
@@ -1669,6 +2434,13 @@ export function LeaveManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {permissions.canViewAllEmployees && (
+          <TabsContent value="cron-settings" className="space-y-6">
+          {/* Cron Settings Configuration */}
+          <CronSettingsTab />
+        </TabsContent>
+        )}
 
         {permissions.canViewAllEmployees && (
           <TabsContent value="holidays" className="space-y-6">

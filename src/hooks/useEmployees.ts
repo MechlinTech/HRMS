@@ -31,11 +31,11 @@ export function useFilteredEmployees() {
       // Get all user roles to check for manager roles
       const userRoles = getAllUserRoleNames(user);
       const isManagerRole = ['sdm', 'bdm', 'qam', 'manager'].some(role => userRoles.includes(role));
-      const isFinanceManager = ['finance', 'finance_manager'].some(role => userRoles.includes(role));
+      const isFinanceRole = ['finance', 'finance_manager'].some(role => userRoles.includes(role));
       
-      // Managers (including Finance Manager) should only see their team members
-      // Even if Finance Manager has canViewAllEmployees, they should only see their team in Employee Management
-      const shouldSeeOnlyTeam = userIsManager || isManagerRole || isFinanceManager;
+      // Finance roles should see all employees (view-only access)
+      // Managers should only see their team members
+      const shouldSeeOnlyTeam = (userIsManager || isManagerRole) && !isFinanceRole;
 
       console.log('🔍 Employee filtering - User roles:', {
         isAdmin: userIsAdmin,
@@ -43,19 +43,19 @@ export function useFilteredEmployees() {
         isManager: userIsManager,
         isFinance: userIsFinance,
         isManagerRole,
-        isFinanceManager,
+        isFinanceRole,
         shouldSeeOnlyTeam,
         primaryRole: user.role?.name,
         additionalRoles: user.additional_roles?.map(r => r.name)
       });
 
-      // Admin and HR can see all employees (but not Finance Manager even if they have admin-like permissions)
-      if ((userIsAdmin || userIsHR) && !shouldSeeOnlyTeam) {
-        console.log('✅ User has admin/HR access - fetching all employees');
+      // Admin, HR, and Finance roles can see all employees
+      if (userIsAdmin || userIsHR || isFinanceRole) {
+        console.log('✅ User has admin/HR/Finance access - fetching all employees');
         return employeeApi.getAllEmployees();
       }
 
-      // Managers (including Finance Manager) can only see their team members
+      // Managers (excluding Finance roles) can only see their team members
       if (shouldSeeOnlyTeam) {
         console.log('📋 User has manager access - fetching team members only');
         const { data, error } = await supabase
@@ -616,7 +616,7 @@ export function useUpdateEmployee() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) =>
       authApi.updateProfile(id, updates),
-    onSuccess: (updatedEmployee, { id }) => {
+    onSuccess: (updatedEmployee, { id, updates }) => {
       // Invalidate all relevant query keys to ensure immediate UI updates
       queryClient.invalidateQueries({ queryKey: ['all-employees'] });
       queryClient.invalidateQueries({ queryKey: ['filtered-employees'] });
@@ -626,6 +626,13 @@ export function useUpdateEmployee() {
       queryClient.invalidateQueries({ queryKey: ['document-types', id] });
       queryClient.invalidateQueries({ queryKey: ['employee-documents', id] });
       queryClient.invalidateQueries({ queryKey: ['work-experience', id] });
+      
+      // If employment_terms was updated, invalidate leave balances since it affects leave rate
+      if (updates?.employment_terms !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
+        queryClient.invalidateQueries({ queryKey: ['leave-balance', id] });
+        queryClient.invalidateQueries({ queryKey: ['user-leave-summary', id] });
+      }
       
       toast.success('Employee updated successfully!');
     },

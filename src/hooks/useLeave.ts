@@ -34,16 +34,23 @@ export function useLeaveApplications() {
 
 export function useCreateLeaveApplication() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, refreshUserRoles } = useAuth();
   
   return useMutation({
     mutationFn: leaveApi.createLeaveApplication,
     onSuccess: () => {
+      // Invalidate employee-side leave applications
       queryClient.invalidateQueries({ queryKey: ['leave-applications', user?.id] });
+      // Invalidate manager/HR-side leave applications so they see new applications immediately
+      queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
       queryClient.invalidateQueries({ queryKey: ['leave-balance', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['employees-on-leave'] });
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count', user?.id] });
+      
+      // Refresh user data to ensure comp_off_balance is up to date
+      refreshUserRoles().catch(console.error);
+      
       toast.success('Leave application submitted successfully!');
     },
     onError: (error: any) => {
@@ -53,6 +60,8 @@ export function useCreateLeaveApplication() {
         console.warn('Leave application created but email trigger failed:', error);
         // Still invalidate queries since the leave was likely created successfully
         queryClient.invalidateQueries({ queryKey: ['leave-applications', user?.id] });
+        // Invalidate manager/HR-side leave applications
+        queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
         queryClient.invalidateQueries({ queryKey: ['leave-balance', user?.id] });
         queryClient.invalidateQueries({ queryKey: ['employees-on-leave'] });
         queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
@@ -67,7 +76,7 @@ export function useCreateLeaveApplication() {
 
 export function useWithdrawLeaveApplication() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, refreshUserRoles } = useAuth();
   
   return useMutation({
     mutationFn: async ({ 
@@ -175,6 +184,9 @@ export function useWithdrawLeaveApplication() {
       queryClient.invalidateQueries({ queryKey: ['employees-on-leave'] });
       queryClient.invalidateQueries({ queryKey: ['user-leave-summary'] });
       
+      // Refresh user data to get updated comp_off_balance if it was restored
+      refreshUserRoles().catch(console.error);
+      
       toast.success('Leave application withdrawn successfully!');
     },
     onError: (error: any) => {
@@ -216,13 +228,15 @@ export function useUserLeaveSummary() {
 
 export function useRecalculateUserBalance() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, refreshUserRoles } = useAuth();
   
   return useMutation({
     mutationFn: (userId?: string) => leaveApi.recalculateUserBalance(userId || user!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leave-balance', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['user-leave-summary', user?.id] });
+      // Refresh user data to get updated comp_off_balance if it changed
+      refreshUserRoles().catch(console.error);
       toast.success('Leave balance recalculated successfully!');
     },
     onError: (error) => {

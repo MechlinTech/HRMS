@@ -90,7 +90,7 @@ export const DASHBOARD_CONFIG = [
       // { id: 'attendance', name: 'Attendance Reports', slug: 'attendance', path: '/employees/attendance', icon: 'Clock' },
       // { id: 'projects', name: 'Project Management', slug: 'projects', path: '/employees/projects', icon: 'Building' },
       { id: 'feedback', name: 'HRMS Feedback', slug: 'feedback', path: '/employees/feedback', icon: 'MessageSquare' },
-      { id: 'role-permissions', name: 'Role Permissions', slug: 'role-permissions', path: '/admin/role-permissions', icon: 'Shield' },
+      { id: 'admin-settings', name: 'Admin Settings', slug: 'admin-settings', path: '/employees/admin-settings', icon: 'Settings' },
     ],
   },
   {
@@ -135,20 +135,20 @@ export const DASHBOARD_CONFIG = [
   //     { id: 'logs', name: 'Billing Logs', slug: 'logs', path: '/bd/logs', icon: 'History' },
   //   ],
   // },
-  // {
-  //   id: 'finance',
-  //   name: 'Finance',
-  //   slug: 'finance',
-  //   description: 'Financial operations and payroll',
-  //   icon: 'DollarSign',
-  //   color: 'emerald',
-  //   pages: [
-  //     { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
-  //     { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
-  //     { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
-  //     { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
-  //   ],
-  // },
+  {
+    id: 'finance',
+    name: 'Finance',
+    slug: 'finance',
+    description: 'Financial operations and payroll',
+    icon: 'DollarSign',
+    color: 'emerald',
+    pages: [
+      { id: 'overview', name: 'Finance Dashboard', slug: 'overview', path: '/finance', icon: 'DollarSign' },
+      { id: 'payroll', name: 'All Payroll', slug: 'payroll', path: '/finance/payroll', icon: 'Banknote' },
+      { id: 'billing', name: 'All Billing', slug: 'billing', path: '/finance/billing', icon: 'Receipt' },
+      { id: 'logs', name: 'Payroll Logs', slug: 'logs', path: '/finance/logs', icon: 'History' },
+    ],
+  },
   // {
   //   id: 'ats',
   //   name: 'ATS',

@@ -125,6 +125,9 @@ export function useAllLeaveApplications() {
           comments: row.comments,
           created_at: row.created_at,
           updated_at: row.updated_at,
+          is_half_day: row.is_half_day || false,
+          half_day_period: row.half_day_period,
+          lop_days: row.lop_days || 0,
           user: {
             id: row.user_id,
             full_name: row.user_full_name,
@@ -182,6 +185,9 @@ export function useAllLeaveApplications() {
           comments: row.comments,
           created_at: row.created_at,
           updated_at: row.updated_at,
+          is_half_day: row.is_half_day || false,
+          half_day_period: row.half_day_period,
+          lop_days: row.lop_days || 0,
           user: {
             id: row.user_id,
             full_name: row.user_full_name,
@@ -311,13 +317,18 @@ export function useUpdateLeaveApplicationStatus() {
       return transformedData;
     },
     onSuccess: async(data) => {
+      // Invalidate both employee-side and manager/HR-side leave application queries
       queryClient.invalidateQueries({ queryKey: ['all-leave-applications'] });
       queryClient.invalidateQueries({ queryKey: ['leave-applications'] });
       
       // IMPORTANT: Also invalidate leave balance queries since approval updates balances
       queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['all-employees-leave-balances-with-manager'] });
       queryClient.invalidateQueries({ queryKey: ['leave-balance', data.user_id] });
       queryClient.invalidateQueries({ queryKey: ['user-leave-summary', data.user_id] });
+      
+      // Note: If this is a compensatory off leave, the database trigger will automatically
+      // deduct from comp_off_balance. The user will need to refresh to see the updated balance.
       
       // The database trigger will automatically create the notification
       // and send push notification via the edge function

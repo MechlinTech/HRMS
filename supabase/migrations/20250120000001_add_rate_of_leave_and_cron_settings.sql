@@ -89,7 +89,7 @@ CREATE POLICY "Admins can update cron settings" ON leave_cron_settings
 -- ========================================
 
 -- Function to allocate monthly leave based on rate_of_leave
-CREATE OR REPLACE FUNCTION public.allocate_monthly_leave(p_skip_cron_check boolean DEFAULT false)
+CREATE OR REPLACE FUNCTION allocate_monthly_leave(p_skip_cron_check boolean DEFAULT false)
 RETURNS TABLE (
   user_id uuid,
   employee_name text,
@@ -301,11 +301,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Add comment
-COMMENT ON FUNCTION public.allocate_monthly_leave(boolean) IS 'Allocates monthly leave to all active employees based on their rate_of_leave. Checks cron settings before running.';
+CREATE OR REPLACE FUNCTION allocate_monthly_leave()
+RETURNS TABLE (
+  user_id uuid,
+  employee_name text,
+  rate_of_leave numeric,
+  allocated_days numeric,
+  success boolean,
+  message text
+)
+AS $$
+  SELECT * FROM allocate_monthly_leave(false);
+$$ LANGUAGE sql SECURITY DEFINER;
 
--- Grant execute permission
-GRANT EXECUTE ON FUNCTION public.allocate_monthly_leave(boolean) TO authenticated;
+
+-- Add comment
+COMMENT ON FUNCTION allocate_monthly_leave() IS 'Allocates monthly leave to all active employees based on their rate_of_leave. Checks cron settings before running.';
 
 -- ========================================
 -- 4. CREATE FUNCTION TO GET ACTIVE CRON SETTINGS
@@ -561,7 +572,7 @@ BEGIN
     SELECT cron.schedule(
       'monthly-leave-allocation',
       v_settings.cron_schedule,
-      'SELECT public.allocate_monthly_leave(false)'
+      'SELECT allocate_monthly_leave(false)'
     ) INTO v_job_id;
 
     -- Update next_run_at in settings

@@ -356,7 +356,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION update_leave_balance_rate_on_employment_term_change IS 'Trigger function that updates rate_of_leave in all leave_balances when a user''s employment_terms changes.';
 
@@ -385,7 +385,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION update_leave_balance_rate_on_rate_change IS 'Trigger function that updates rate_of_leave in all leave_balances when employment_term_leave_rates are updated.';
 
@@ -399,8 +399,5 @@ CREATE TRIGGER trigger_update_leave_balance_rate_on_rate_change
 
 -- Update all existing leave balances with rates based on current employment terms
 -- This is a one-time update for existing data
--- NOTE: This update is commented out to avoid deadlocks during migration.
--- Run this manually after the migration completes:
--- SELECT update_all_users_leave_rates_from_employment_terms();
--- Or run it in a separate migration or during off-peak hours.
+SELECT update_all_users_leave_rates_from_employment_terms();
 

@@ -301,20 +301,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE FUNCTION allocate_monthly_leave()
-RETURNS TABLE (
-  user_id uuid,
-  employee_name text,
-  rate_of_leave numeric,
-  allocated_days numeric,
-  success boolean,
-  message text
-)
-AS $$
-  SELECT * FROM allocate_monthly_leave(false);
-$$ LANGUAGE sql SECURITY DEFINER;
-
-
 -- Add comment
 COMMENT ON FUNCTION allocate_monthly_leave() IS 'Allocates monthly leave to all active employees based on their rate_of_leave. Checks cron settings before running.';
 

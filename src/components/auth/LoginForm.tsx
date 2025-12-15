@@ -126,6 +126,8 @@ export function LoginForm() {
             prompt: 'select_account', // Force account selection
         })
         .catch((error: any) => console.log(error));
+    
+    console.log("Test to see if prod code is up to date")
   };
 
   const handleSelectDifferentAccount = () => {

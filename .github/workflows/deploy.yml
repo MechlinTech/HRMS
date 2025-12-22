@@ -38,7 +38,7 @@ jobs:
             --build-arg VITE_SECOND_SUPABASE_URL="${{ secrets.VITE_SECOND_SUPABASE_URL }}" `
             --build-arg VITE_SECOND_SUPABASE_ANON_KEY="${{ secrets.VITE_SECOND_SUPABASE_ANON_KEY }}" `
             --build-arg MICROSOFT_CLIENT_SECRET="${{ secrets.MICROSOFT_CLIENT_SECRET }}" `
-            -f docker/Dockerfile `
+            -f hrms-docker/Dockerfile `
             -t ${{ secrets.DOCKER_USERNAME }}/hrms-frontend:latest `
             .
 
@@ -49,7 +49,7 @@ jobs:
       # --- STOP OLD CONTAINERS & REMOVE NETWORK ---
       - name: Stop Containers and Remove Network
         run: |
-          docker compose -f docker/docker-compose.yml down --remove-orphans
+          docker compose -f hrms-docker/docker-compose.yml down --remove-orphans
           docker network prune -f
         continue-on-error: true
 
@@ -62,9 +62,9 @@ jobs:
       # --- PULL LATEST IMAGE ---
       - name: Pull Latest Image from Docker Hub
         run: |
-          docker compose -f docker/docker-compose.yml pull
+          docker compose -f hrms-docker/docker-compose.yml pull
 
       # --- DEPLOY WITH FRESH IMAGE ---
       - name: Deploy with Docker Compose
         run: |
-          docker compose -f docker/docker-compose.yml up -d --force-recreate
+          docker compose -f hrms-docker/docker-compose.yml up -d --force-recreate
